@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: ragent-learning
+
+server:
+  port: ${SERVER_PORT:18081}
