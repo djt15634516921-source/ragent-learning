@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP 入口：接收 JSON 问题，交给业务层，返回 JSON 回答。 */
+/** HTTP 入口：取出会话编号和问题，交给 Service，包装回答。 */
 @RestController
 @RequestMapping("/api")
 public class ChatController {
@@ -20,7 +20,9 @@ public class ChatController {
 
     @PostMapping(value = "/chat", produces = "application/json;charset=UTF-8")
     public ChatResponse chat(@RequestBody ChatRequest request) {
+        String conversationId = request == null ? null : request.conversationId();
         String question = request == null ? null : request.question();
-        return new ChatResponse(chatService.chat(question));
+        String answer = chatService.chat(conversationId, question);
+        return new ChatResponse(answer);
     }
 }

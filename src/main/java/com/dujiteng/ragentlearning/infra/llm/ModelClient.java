@@ -4,6 +4,7 @@ import com.dujiteng.ragentlearning.common.ChatApiException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,24 +43,20 @@ public class ModelClient {
         this.restClient = RestClient.builder().requestFactory(factory).build();
     }
 
-    public String chat(String systemPrompt, String question) {
+    public String chat(String systemPrompt, List<Map<String, String>> history, String question) {
         URI endpoint = configuredEndpoint();
 
-        // 这一版每次只发送当前问题，不包含历史、检索资料或工具定义。
+        // 系统提示词只放一次；历史保留原顺序；最后追加本次问题。
+        // 新建请求列表，不直接修改存储中的历史。
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content", systemPrompt));
+        messages.addAll(history);
+        messages.add(Map.of("role", "user", "content", question));
+
         Map<String, Object> payload = Map.of(
                 "model", model,
-                "messages", List.of(
-                        Map.of(
-                                "role", "system",
-                                "content", systemPrompt
-                        ),
-                        Map.of(
-                                "role", "user",
-                                "content", question
-                        )
-                ),
-                "stream", false
-        );
+                "messages", messages,
+                "stream", false);
 
         try {
             Map<String, Object> response = restClient.post()
@@ -82,7 +79,7 @@ public class ModelClient {
                 throw new ChatApiException(503, "MODEL_RATE_LIMITED",
                         "模型平台返回 429，请检查调用配额、并发或限流提示", error);
             }
-            String detail = safeProviderMessage(error, question);
+            String detail = safeProviderMessage(error, messages);
             throw new ChatApiException(502, "MODEL_HTTP_ERROR",
                     "模型平台返回 HTTP " + status + "，请检查调用地址、模型名称及请求参数"
                             + (detail.isBlank() ? "" : "；平台提示：" + detail), error);
@@ -95,8 +92,8 @@ public class ModelClient {
         }
     }
 
-    /** 只提取平台错误中的 message，遮住本次密钥与完整问题后限制长度。 */
-    private String safeProviderMessage(RestClientResponseException error, String question) {
+    /** 只提取平台错误中的 message，遮住密钥和完整对话内容后限制长度。 */
+    private String safeProviderMessage(RestClientResponseException error, List<Map<String, String>> messages) {
         try {
             Map<String, Object> body = error.getResponseBodyAs(
                     new ParameterizedTypeReference<Map<String, Object>>() { });
@@ -110,9 +107,14 @@ public class ModelClient {
             if (!(raw instanceof String text)) {
                 return "";
             }
-            String safe = text.replace(apiKey, "[密钥已隐藏]")
-                    .replace(question, "[用户问题已隐藏]")
-                    .replace('\r', ' ').replace('\n', ' ').strip();
+            String safe = text.replace(apiKey, "[密钥已隐藏]");
+            for (Map<String, String> message : messages) {
+                String content = message.get("content");
+                if (content != null && !content.isBlank()) {
+                    safe = safe.replace(content, "[对话内容已隐藏]");
+                }
+            }
+            safe = safe.replace('\r', ' ').replace('\n', ' ').strip();
             return safe.substring(0, Math.min(safe.length(), 400));
         } catch (RuntimeException unreadable) {
             return "";

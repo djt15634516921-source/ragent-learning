@@ -19,7 +19,7 @@ public class ChatExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ChatError> handleBadJson(HttpMessageNotReadableException error) {
         return ResponseEntity.badRequest().body(new ChatError(
-                "INVALID_JSON", "请发送 JSON 请求体，例如 {\"question\":\"你好\"}"));
+                "INVALID_JSON", "请发送 JSON 请求体，例如 {\"conversationId\":\"study-001\",\"question\":\"你好\"}"));
     }
 
     public record ChatError(String code, String message) {
