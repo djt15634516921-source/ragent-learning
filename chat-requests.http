@@ -1,0 +1,15 @@
+### 成功场景：先配置模型，再运行应用。
+POST http://localhost:18081/api/chat
+Content-Type: application/json
+
+{"question":"你能生成一个人打乒乓球的图片吗。"}
+
+### 参数错误：预期 HTTP 400，code=QUESTION_REQUIRED，不调用模型。
+POST http://localhost:18081/api/chat
+Content-Type: application/json
+
+{"question":"   "}
+
+### 原接口仍然可访问。
+GET http://localhost:18081/api/hello?name=Du
+$

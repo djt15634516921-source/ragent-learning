@@ -4,3 +4,7 @@ spring:
 
 server:
   port: ${SERVER_PORT:18081}
+llm:
+  chat-url: ${LLM_CHAT_URL:}
+  model: ${LLM_MODEL:}
+  api-key: ${LLM_API_KEY:}

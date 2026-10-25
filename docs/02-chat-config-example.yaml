@@ -1,0 +1,6 @@
+# 把以下 llm 部分追加到现有 src/main/resources/application.yaml。
+# llm 与 spring、server 同级。保留现有应用名和 server.port=18081。
+llm:
+  chat-url: ${LLM_CHAT_URL:}
+  model: ${LLM_MODEL:}
+  api-key: ${LLM_API_KEY:}
