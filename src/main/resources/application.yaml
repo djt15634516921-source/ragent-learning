@@ -2,8 +2,19 @@ spring:
   application:
     name: ragent-learning
 
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/ragent_learning
+    username: postgres
+    password: ${DB_PASSWORD}
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/chat-schema.sql
+
 server:
   port: ${SERVER_PORT:18081}
+
 llm:
   chat-url: ${LLM_CHAT_URL:}
   model: ${LLM_MODEL:}
