@@ -4,7 +4,9 @@ import com.dujiteng.ragentlearning.chat.dto.ChatRequest;
 import com.dujiteng.ragentlearning.chat.dto.ChatResponse;
 import com.dujiteng.ragentlearning.common.ChatApiException;
 import com.dujiteng.ragentlearning.infra.llm.StreamCancellation;
+import com.dujiteng.ragentlearning.system.auth.LoginUser;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -13,6 +15,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,18 +40,32 @@ public class ChatController {
     }
 
     @PostMapping(value = "/chat", produces = "application/json;charset=UTF-8")
-    public ChatResponse chat(@RequestBody ChatRequest request) {
+    public ChatResponse chat(@AuthenticationPrincipal LoginUser user, @RequestBody ChatRequest request) {
         String id = request == null ? null : request.conversationId();
         String question = request == null ? null : request.question();
-        return new ChatResponse(chatService.chat(id, question));
+        return new ChatResponse(chatService.chat(user.userId(), id, question));
+    }
+
+    @GetMapping("/conversations")
+    public List<Map<String, String>> conversations(@AuthenticationPrincipal LoginUser user) {
+        return chatService.listConversations(user.userId());
+    }
+
+    @GetMapping("/conversations/{conversationId}/messages")
+    public List<Map<String, String>> history(@AuthenticationPrincipal LoginUser user,
+                                           @PathVariable String conversationId) {
+        return chatService.history(user.userId(), conversationId);
     }
 
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@RequestBody ChatRequest request) {
+    public SseEmitter stream(@AuthenticationPrincipal LoginUser user, @RequestBody ChatRequest request) {
         // 参数错误在建立 SSE 前返回 HTTP 400 JSON。
         ChatRequest input = chatService.validateRequest(
                 request == null ? null : request.conversationId(),
                 request == null ? null : request.question());
+        // 身份在请求线程确定，再把普通 long 变量传进线程池；不用 worker 中的 ThreadLocal 猜用户。
+        long userId = user.userId();
+        chatService.prepareConversation(userId, input.conversationId());
         SseEmitter emitter = new SseEmitter(90_000L);
         StreamCancellation cancellation = new StreamCancellation();
         AtomicBoolean terminal = new AtomicBoolean();
@@ -78,7 +97,7 @@ public class ChatController {
             Future<?> future = streamExecutor.submit(() -> {
                 try {
                     send(emitter, cancellation, "start", Map.of("conversationId", input.conversationId()));
-                    String answer = chatService.streamChat(input.conversationId(), input.question(), text -> {
+                    String answer = chatService.streamChat(userId, input.conversationId(), input.question(), text -> {
                         if (terminal.get()) {
                             throw new StreamCancellation.Cancelled();
                         }

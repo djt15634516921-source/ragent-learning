@@ -1,5 +1,0 @@
-### 不传名字，使用默认值：同学
-GET http://localhost:8081/api/hello
-
-### 传入名字
-GET http://localhost:8081/api/hello?name=Du
