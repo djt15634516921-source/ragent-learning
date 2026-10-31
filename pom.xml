@@ -4,7 +4,6 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- 沿用这次提供的 Ragent 源码中的 Spring Boot 版本。 -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -15,47 +14,89 @@
     <groupId>com.dujiteng</groupId>
     <artifactId>ragent-learning</artifactId>
     <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
     <name>ragent-learning</name>
-    <description>Ragent 学习工程：第一课，启动与请求调用链</description>
+    <description>Ragent 学习工程父工程：模块聚合与统一版本管理</description>
 
     <properties>
         <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <tika.version>3.3.3</tika.version>
+        <mybatis-plus.version>3.5.18</mybatis-plus.version>
+        <sa-token.version>1.46.0</sa-token.version>
     </properties>
 
-    <dependencies>
-        <!-- 提供 HTTP 接口、Spring MVC 和内嵌 Web 服务器。 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc</artifactId>
-        </dependency>
+    <modules>
+        <module>framework</module>
+        <module>infra-ai</module>
+        <module>system</module>
+        <module>rag</module>
+        <module>bootstrap</module>
+    </modules>
 
-        <!-- Spring 的数据库访问工具，后面使用 JdbcTemplate 执行 SQL -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc</artifactId>
-        </dependency>
-
-        <!-- Java 连接 PostgreSQL 所需的数据库驱动 -->
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>
-    </dependencies>
-
-    <build>
-        <plugins>
-            <!-- 支持 Maven 启动与打包为可运行的 jar。 -->
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
+    <!-- 这里只管理版本，依赖由使用它的子模块显式声明。 -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.dujiteng</groupId>
+                <artifactId>framework</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.dujiteng</groupId>
+                <artifactId>infra-ai</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.dujiteng</groupId>
+                <artifactId>system</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.dujiteng</groupId>
+                <artifactId>rag</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-spring-boot4-starter</artifactId>
+                <version>${sa-token.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-core</artifactId>
+                <version>${sa-token.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-redis-template</artifactId>
+                <version>${sa-token.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-jackson3</artifactId>
+                <version>${sa-token.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-parser-pdf-module</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-parser-microsoft-module</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>

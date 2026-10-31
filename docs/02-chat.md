@@ -1,5 +1,9 @@
 # 第 2 步：在现有工程上接通非流式聊天
 
+> 多模块更新：当前目录、构建与启动见[第 11 步](11-maven-modules.md)。以下为历史课程，旧增量包不能覆盖当前模块目录。
+
+> 课程历史笔记。当前启动、认证和数据访问以 README 与第 10 步为准：所有业务 API 需 Bearer，Service 为接口＋Impl，数据库访问使用 Mapper。下方推导示例保留用于理解演进。
+
 ## 1. 复制到当前工程
 
 这个压缩包包含当前 `ragent-learning` 的新增文件。把包内 `src`、`docs`、`chat-requests.http` 复制到 `D:\jastudy\idea\ragent-learning`。合并已有的 `src` 目录，确认新的 `chat`、`infra`、`common` 包位于 `com.dujiteng.ragentlearning` 下。
