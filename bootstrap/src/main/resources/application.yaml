@@ -1,0 +1,64 @@
+spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+  application:
+    name: ragent-learning
+
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/ragent_learning
+    username: postgres
+    password: ${DB_PASSWORD}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      connect-timeout: 2s
+      timeout: 2s
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/chat-schema.sql
+
+server:
+  port: ${SERVER_PORT:18081}
+
+chat:
+  stream-timeout-ms: ${CHAT_STREAM_TIMEOUT_MS:90000}
+
+llm:
+  chat-url: ${LLM_CHAT_URL:}
+  model: ${LLM_MODEL:}
+  api-key: ${LLM_API_KEY:}
+
+# 只接受显式请求头；Cookie、URL 参数及表单中的 Token 均不参与认证。
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  timeout: ${AUTH_TOKEN_TIMEOUT:28800}
+  active-timeout: -1
+  auto-renew: false
+  is-concurrent: true
+  is-share: false
+  logout-range: TOKEN
+  is-read-body: false
+  is-read-cookie: false
+  is-read-header: true
+  is-write-header: false
+  is-log: false
+  is-print: false
+
+auth:
+  redis-prefix: ${AUTH_REDIS_PREFIX:ragent-learning:auth:}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false

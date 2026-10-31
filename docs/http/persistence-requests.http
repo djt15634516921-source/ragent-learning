@@ -1,0 +1,43 @@
+### 先执行 auth-requests.http 的登录；Java 重启后未过期 token 继续可用。
+@baseUrl = http://localhost:18081
+
+### 第一次：新会话。等待完整回答后，去数据库查看两条消息。
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "conversationId": "pg-study-001",
+  "question": "请记住：我的学习代号是青竹27。回答时确认这个代号。"
+}
+
+### 第二次：先重启 Java 后端，再发送这一条。请求本身不包含代号。
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "conversationId": "pg-study-001",
+  "question": "我之前告诉你的学习代号是什么？"
+}
+
+### 第三次：不同会话不应该读到上一会话的代号。模型回答有随机性，结合数据库和调试查看历史。
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "conversationId": "pg-study-other",
+  "question": "我之前告诉你的学习代号是什么？"
+}
+
+### 第四次：流式接口也使用同一份历史。也可在 stream-test.html 中使用 pg-study-001。
+POST {{baseUrl}}/api/chat/stream
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Accept: text/event-stream
+
+{
+  "conversationId": "pg-study-001",
+  "question": "请说出我的学习代号，再解释一下聊天历史为什么能在后端重启后继续使用。"
+}

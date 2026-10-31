@@ -1,0 +1,40 @@
+@baseUrl = http://localhost:18081
+
+### 先执行 auth-requests.http 的登录
+POST {{baseUrl}}/api/knowledge-bases
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name":"HTTP 学习资料","description":"独立测试资料"}
+
+> {% if (response.status === 201) client.global.set("kbId", response.body.id); %}
+
+### 我的知识库
+GET {{baseUrl}}/api/knowledge-bases
+Authorization: Bearer {{token}}
+
+### 上传；boundary 与请求体保持一致
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=RagentLearningBoundary
+
+--RagentLearningBoundary
+Content-Disposition: form-data; name="file"; filename="knowledge-demo.md"
+Content-Type: text/markdown
+
+< ../examples/knowledge-demo.md
+--RagentLearningBoundary--
+
+> {% if (response.status === 201) client.global.set("docId", response.body.id); %}
+
+### 解析原文件
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/parse
+Authorization: Bearer {{token}}
+
+### 查看正文与处理状态
+GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/text
+Authorization: Bearer {{token}}
+
+### 下载只在请求头携带 Token，不放 URL
+GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/file
+Authorization: Bearer {{token}}

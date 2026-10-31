@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ragent 流式聊天测试</title>
+  <style>
+    body { margin: 40px auto; padding: 0 20px; max-width: 800px; font: 16px/1.7 system-ui, sans-serif; color: #243047; background: #f6f8fc; }
+    h1 { font-size: 26px; }
+    form, .result { padding: 24px; margin: 20px 0; background: white; border: 1px solid #dde3ec; border-radius: 12px; }
+    label { display: block; margin: 12px 0 6px; font-weight: 600; }
+    input, textarea, button { box-sizing: border-box; font: inherit; }
+    input, textarea { width: 100%; padding: 10px; border: 1px solid #bdc8d8; border-radius: 6px; }
+    textarea { min-height: 130px; resize: vertical; }
+    button { margin-top: 16px; padding: 10px 22px; color: white; background: #285edb; border: 0; border-radius: 6px; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+    #status { color: #52627a; }
+    .hint { font-size: 14px; color: #52627a; }
+  </style>
+</head>
+<body>
+  <h1>Ragent 流式聊天测试</h1>
+  <p>观察回答逐段出现；使用相同会话编号继续追问。</p>
+  <form id="chat-form">
+    <label for="conversation-id">会话编号</label>
+    <input id="conversation-id" value="stream-001" maxlength="128" required>
+    <label for="question">本次问题</label>
+    <textarea id="question" required>请分成八步解释一次 Java 后端调用大模型的完整流程，每步写两句话。</textarea>
+    <button id="send" type="submit">发送并观察回答</button>
+    <p class="hint">请先在<a href="/login-test.html">聊天页登录</a>，再在同一标签页使用本页。历史会保存到数据库。</p>
+  </form>
+  <section class="result">
+    <div id="status" role="status">等待发送</div>
+    <pre id="answer"></pre>
+  </section>
+  <script src="/auth.js"></script>
+  <script>
+    const form = document.getElementById('chat-form');
+    const button = document.getElementById('send');
+    const status = document.getElementById('status');
+    const output = document.getElementById('answer');
+
+    // fetch 的网络块不等于一条 SSE 事件，所以先累积，再按空行分帧。
+    function createSseReader(onEvent) {
+      let buffer = '';
+      return function feed(text) {
+        buffer = (buffer + text).replace(/\r\n/g, '\n');
+        let boundary;
+        while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+          const frame = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          let name = 'message';
+          const data = [];
+          for (const line of frame.split('\n')) {
+            if (line.startsWith('event:')) name = line.slice(6).trim();
+            if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+          }
+          if (data.length) onEvent(name, JSON.parse(data.join('\n')));
+        }
+      };
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      button.disabled = true;
+      output.textContent = '';
+      status.textContent = '正在连接…';
+      const started = performance.now();
+      let chunks = 0;
+      let terminal = false;
+      let reader;
+      try {
+        const response = await RagentAuth.fetch('/api/chat/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+          body: JSON.stringify({
+            conversationId: document.getElementById('conversation-id').value,
+            question: document.getElementById('question').value
+          })
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(`HTTP ${response.status} · ${error.code}: ${error.message}`);
+        }
+        if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+          throw new Error('接口没有返回 SSE，请确认代码已更新并重启。');
+        }
+        const feed = createSseReader((name, data) => {
+          if (name === 'start') status.textContent = '已连接，等待模型返回第一段文字…';
+          if (name === 'delta') {
+            chunks++;
+            output.textContent += data.content;
+            status.textContent = `接收中 · 已收到 ${chunks} 个文字片段`;
+          }
+          if (name === 'done') {
+            terminal = true;
+            output.textContent = data.answer;
+            status.textContent = `已完成并保存本轮 · ${chunks} 个片段 · ${((performance.now() - started) / 1000).toFixed(2)} 秒`;
+          }
+          if (name === 'error') {
+            terminal = true;
+            status.textContent = `失败 · ${data.code}: ${data.message}`;
+          }
+        });
+        reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) { feed(decoder.decode()); break; }
+          feed(decoder.decode(value, { stream: true }));
+        }
+        if (!terminal) status.textContent = '连接已结束，但未收到完成事件；本次结果尚未确认，请重试。';
+      } catch (error) {
+        status.textContent = `请求失败：${error.message}`;
+      } finally {
+        if (reader) reader.releaseLock();
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

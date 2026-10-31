@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ragent 登录与聊天</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 36px auto; padding: 0 20px; max-width: 880px; font: 16px/1.7 system-ui,sans-serif; color: #243047; background: #f6f8fc; }
+    h1 { font-size: 26px; } h2 { font-size: 19px; margin-top: 0; }
+    section { padding: 24px; margin: 20px 0; background: white; border: 1px solid #dde3ec; border-radius: 12px; }
+    label { display: block; margin: 12px 0 6px; font-weight: 600; }
+    input,textarea,select,button { font: inherit; }
+    input,textarea,select { width: 100%; padding: 10px; border: 1px solid #bdc8d8; border-radius: 6px; }
+    textarea { min-height: 110px; resize: vertical; }
+    button { margin: 12px 8px 0 0; padding: 9px 17px; border: 0; border-radius: 6px; cursor: pointer; color: white; background: #285edb; }
+    button.secondary { background: #e9eef8; color: #243047; }
+    button:disabled { opacity: .5; cursor: default; }
+    fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+    .hint,[role=status] { color: #52627a; font-size: 14px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin-bottom: 0; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media(max-width:600px) { .row { grid-template-columns: 1fr; gap: 0; } }
+  </style>
+</head>
+<body>
+  <h1>Ragent 登录与聊天</h1>
+  <p>登录自己的账号，继续自己的会话。</p>
+  <p><a href="/knowledge-test.html">管理知识库与上传文档</a></p>
+  <section>
+    <h2>账号</h2>
+    <form id="auth-form">
+      <div class="row">
+        <div><label for="username">用户名</label><input id="username" autocomplete="username" maxlength="32" required placeholder="例如 study_a"></div>
+        <div><label for="password">密码</label><input id="password" type="password" autocomplete="current-password" required placeholder="至少 8 个字符"></div>
+      </div>
+      <button id="login" type="submit">登录</button>
+      <button id="register" type="button" class="secondary">注册账号</button>
+      <button id="logout" type="button" class="secondary" disabled>退出登录</button>
+    </form>
+    <p id="auth-status" role="status">正在检查登录状态…</p>
+  </section>
+  <section>
+    <h2>会话</h2>
+    <fieldset id="chat-fields" disabled>
+      <label for="saved-conversations">我的最近会话</label>
+      <select id="saved-conversations"><option value="">请选择，或新建会话</option></select>
+      <button id="new-conversation" type="button" class="secondary">新建会话</button>
+      <button id="refresh-conversations" type="button" class="secondary">刷新列表</button>
+      <form id="chat-form">
+        <label for="conversation-id">会话编号</label>
+        <input id="conversation-id" maxlength="128" required placeholder="新建后自动填写，也可以填写自己的旧会话编号">
+        <button id="load-history" type="button" class="secondary">查看最近历史</button>
+        <label for="question">本次问题</label>
+        <textarea id="question" maxlength="8000" required>请记住：我的学习代号是朱之文01。</textarea>
+        <label for="mode">回答方式</label>
+        <select id="mode"><option value="stream">逐段显示</option><option value="normal">等待完整回答</option></select>
+        <button id="send" type="submit">发送问题</button>
+      </form>
+    </fieldset>
+    <p class="hint">聊天历史会保存。服务重启后，未过期的登录仍有效。关闭当前标签页会清理本页登录凭证。</p>
+  </section>
+  <section><h2>本次回答</h2><div id="chat-status" role="status">请先登录</div><pre id="answer"></pre></section>
+  <section><h2>最近历史</h2><p class="hint">显示当前会话最近 6 轮；更早的成功记录仍保留。</p><pre id="history">尚未选择会话</pre></section>
+  <script src="/auth.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    let currentUser = null;
+    let busy = false;
+    let aborter = null;
+
+    async function jsonResponse(response) {
+      const data = await response.json();
+      if (!response.ok) throw new Error(`HTTP ${response.status} · ${data.code}: ${data.message}`);
+      return data;
+    }
+    async function getJson(url) {
+      return jsonResponse(await RagentAuth.fetch(url));
+    }
+    async function post(url, body, contentType, extra = {}) {
+      return RagentAuth.fetch(url, {
+        method: 'POST', body, ...extra,
+        headers: {'Content-Type': contentType, ...extra.headers}
+      });
+    }
+    window.addEventListener('ragent-auth-expired', () => {
+      if (aborter) aborter.abort();
+      showUser(null);
+      $('auth-status').textContent = '登录已失效，请重新登录';
+    });
+    function showUser(user) {
+      currentUser = user;
+      $('chat-fields').disabled = !user || busy;
+      $('logout').disabled = !user;
+      $('login').disabled = busy || !!user;
+      $('register').disabled = busy || !!user;
+      $('username').disabled = !!user;
+      $('password').disabled = !!user;
+      $('auth-status').textContent = user ? `已登录：${user.username} · 用户编号 ${user.userId}` : '尚未登录';
+    }
+    function newConversation() {
+      $('conversation-id').value = 'chat-' + crypto.randomUUID();
+      $('saved-conversations').value = '';
+      $('answer').textContent = '';
+      $('history').textContent = '新会话，尚无消息';
+      $('chat-status').textContent = '可以发送问题';
+    }
+    async function refreshConversations() {
+      const items = await getJson('/api/conversations');
+      const select = $('saved-conversations');
+      select.replaceChildren(new Option('请选择，或新建会话', ''));
+      for (const item of items) select.add(new Option(item.conversationId, item.conversationId));
+      select.value = items.some(x => x.conversationId === $('conversation-id').value) ? $('conversation-id').value : '';
+    }
+    async function loadHistory() {
+      const cid = $('conversation-id').value.trim();
+      if (!cid) throw new Error('请先填写会话编号');
+      const messages = await getJson('/api/conversations/' + encodeURIComponent(cid) + '/messages');
+      $('history').textContent = messages.length ? messages.map(m => `${m.role === 'user' ? '我' : '助手'}：${m.content}`).join('\n\n') : '尚无成功保存的消息';
+    }
+    $('auth-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      if (currentUser || busy) return;
+      $('login').disabled = $('register').disabled = true;
+      $('auth-status').textContent = '正在登录…';
+      try {
+        const data = JSON.stringify({username: $('username').value, password: $('password').value});
+        const user = await jsonResponse(await post('/api/auth/login', data, 'application/json'));
+        RagentAuth.set(user.token);
+        $('password').value = '';
+        showUser(user);
+        newConversation();
+        await refreshConversations();
+      } catch (error) {
+        showUser(currentUser);
+        $('auth-status').textContent = error.message;
+      }
+    });
+    $('register').addEventListener('click', async () => {
+      if (currentUser || busy) return;
+      $('login').disabled = $('register').disabled = true;
+      try {
+        const user = await jsonResponse(await post('/api/auth/register', JSON.stringify({username: $('username').value, password: $('password').value}), 'application/json'));
+        $('username').value = user.username;
+        $('auth-status').textContent = `账号 ${user.username} 已创建，请点击登录`;
+      } catch (error) { $('auth-status').textContent = error.message; }
+      finally { $('login').disabled = $('register').disabled = false; }
+    });
+    $('logout').addEventListener('click', async () => {
+      if (aborter) aborter.abort();
+      try {
+        await jsonResponse(await post('/api/auth/logout', '', 'application/json'));
+        RagentAuth.clear();
+        showUser(null);
+        $('answer').textContent = $('conversation-id').value = '';
+        $('history').textContent = '尚未选择会话';
+        $('saved-conversations').replaceChildren(new Option('请选择，或新建会话', ''));
+        $('chat-status').textContent = '已退出，请重新登录';
+      } catch (error) { $('auth-status').textContent = error.message; }
+    });
+    $('new-conversation').addEventListener('click', newConversation);
+    $('refresh-conversations').addEventListener('click', () => refreshConversations().catch(error => $('chat-status').textContent = error.message));
+    $('load-history').addEventListener('click', () => loadHistory().catch(error => $('chat-status').textContent = error.message));
+    $('saved-conversations').addEventListener('change', () => {
+      if (!$('saved-conversations').value) return;
+      $('conversation-id').value = $('saved-conversations').value;
+      $('answer').textContent = '';
+      loadHistory().catch(error => $('chat-status').textContent = error.message);
+    });
+    function createSseReader(onEvent) {
+      let buffer = '';
+      return text => {
+        buffer = (buffer + text).replace(/\r\n/g, '\n');
+        let boundary;
+        while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+          const frame = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
+          let name = 'message'; const data = [];
+          for (const line of frame.split('\n')) {
+            if (line.startsWith('event:')) name = line.slice(6).trim();
+            if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+          }
+          if (data.length) onEvent(name, JSON.parse(data.join('\n')));
+        }
+      };
+    }
+    $('chat-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!currentUser || busy) return;
+      busy = true; showUser(currentUser); aborter = new AbortController();
+      $('answer').textContent = ''; $('chat-status').textContent = '正在连接…';
+      const started = performance.now(); let reader; let completed = false; let terminal = false; let chunks = 0;
+      try {
+        const streaming = $('mode').value === 'stream';
+        const response = await post(streaming ? '/api/chat/stream' : '/api/chat', JSON.stringify({
+          conversationId: $('conversation-id').value, question: $('question').value
+        }), 'application/json', {signal: aborter.signal, headers: {'Accept': streaming ? 'text/event-stream' : 'application/json'}});
+        if (!streaming || !response.ok) {
+          const data = await jsonResponse(response);
+          $('answer').textContent = data.answer; completed = terminal = true;
+        } else {
+          if (!response.headers.get('content-type')?.includes('text/event-stream')) throw new Error('接口没有返回流式回答');
+          const feed = createSseReader((name, data) => {
+            if (name === 'start') $('chat-status').textContent = '等待模型返回…';
+            if (name === 'delta') { chunks++; $('answer').textContent += data.content; $('chat-status').textContent = `接收中 · ${chunks} 个片段`; }
+            if (name === 'done') { completed = terminal = true; $('answer').textContent = data.answer; }
+            if (name === 'error') { terminal = true; $('chat-status').textContent = `失败 · ${data.code}: ${data.message}`; }
+          });
+          reader = response.body.getReader(); const decoder = new TextDecoder('utf-8');
+          while (true) {
+            const {value, done} = await reader.read();
+            if (done) { feed(decoder.decode()); break; }
+            feed(decoder.decode(value, {stream: true}));
+          }
+        }
+        if (completed) {
+          $('chat-status').textContent = `回答已完成并保存 · ${((performance.now() - started) / 1000).toFixed(2)} 秒`;
+          if (currentUser) await Promise.all([refreshConversations(), loadHistory()]);
+        } else if (!terminal) $('chat-status').textContent = '连接已结束，保存结果尚未确认，请查看历史后再决定是否重试。';
+      } catch (error) { $('chat-status').textContent = error.name === 'AbortError' ? '已停止接收，请查看历史确认保存情况。' : error.message; }
+      finally { if (reader) reader.releaseLock(); busy = false; aborter = null; showUser(currentUser); }
+    });
+    (async () => {
+      try {
+        const response = await RagentAuth.fetch('/api/auth/me');
+        if (response.status === 401) { showUser(null); return; }
+        showUser(await jsonResponse(response)); newConversation(); await refreshConversations();
+      } catch (error) { showUser(null); $('auth-status').textContent = error.message; }
+    })();
+  </script>
+</body>
+</html>

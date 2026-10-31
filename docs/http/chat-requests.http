@@ -1,0 +1,22 @@
+### 先配置模型并执行 auth-requests.http 的登录，取得临时 token。
+POST http://localhost:18081/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"conversationId":"http-chat-study","question":"解释一下当前项目的一次聊天调用链。"}
+
+### 参数错误：预期 HTTP 400，code=QUESTION_REQUIRED，不调用模型。
+POST http://localhost:18081/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"conversationId":"http-chat-study","question":"   "}
+
+### 同一会话流式回答
+POST http://localhost:18081/api/chat/stream
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Accept: text/event-stream
+
+{"conversationId":"http-chat-study","question":"再给一个具体例子。"}
+$

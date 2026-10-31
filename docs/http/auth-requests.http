@@ -1,0 +1,36 @@
+@baseUrl = http://localhost:18081
+
+### 将 docs/examples/http-client.private.env.example.json 复制到工程根目录
+### 命名为 http-client.private.env.json，填写本地账号密码，选择 local 环境。
+### 注册（已有账号不重复执行）
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{"username":"{{username}}","password":"{{password}}"}
+
+### 登录；将响应 Token 保存在 IDEA HTTP Client 的临时全局变量中
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{"username":"{{username}}","password":"{{password}}"}
+
+> {%
+    client.test("login", function() { client.assert(response.status === 200); });
+    if (response.status === 200) client.global.set("token", response.body.token);
+%}
+
+### 当前用户，不返回密码哈希
+GET {{baseUrl}}/api/auth/me
+Authorization: Bearer {{token}}
+
+### 退出只撤销当前 Token；其他终端继续有效
+POST {{baseUrl}}/api/auth/logout
+Authorization: Bearer {{token}}
+
+> {% if (response.status === 200) client.global.clear("token"); %}
+
+### 不带 Token：401
+GET {{baseUrl}}/api/conversations
+
+### 旧流程：410，不能再获取 CSRF 凭证
+GET {{baseUrl}}/api/auth/csrf
