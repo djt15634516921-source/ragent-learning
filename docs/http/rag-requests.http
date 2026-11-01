@@ -1,0 +1,36 @@
+@baseUrl = http://localhost:18081
+
+### 沿用 auth/knowledge 请求中取得的 token、kbId、docId；先解析并切分文档。
+### 此操作调用真实 Embedding 服务，相同版本及模型成功后重复请求复用。
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/index
+Authorization: Bearer {{token}}
+
+### 索引状态；换模型后旧空间会显示待处理
+GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/index
+Authorization: Bearer {{token}}
+
+### 检索预览：仅调用问题 Embedding，不调用聊天模型
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/search
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"question":"星河学习项目的验收口令是什么？"}
+
+### 带来源的完整回答；与普通聊天分开使用会话编号
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"conversationId":"http-rag-study","knowledgeBaseId":{{kbId}},"question":"星河学习项目的验收口令是什么？"}
+
+### 同一知识库会话的流式回答；done 包含 answer 和 sources
+POST {{baseUrl}}/api/chat/stream
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Accept: text/event-stream
+
+{"conversationId":"http-rag-study","knowledgeBaseId":{{kbId}},"question":"根据资料，负责人是谁？"}
+
+### 问答与来源快照；历史来源不随重新切分改写
+GET {{baseUrl}}/api/conversations/http-rag-study/messages
+Authorization: Bearer {{token}}

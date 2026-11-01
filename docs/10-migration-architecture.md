@@ -1,5 +1,7 @@
 # MyBatis-Plus、Sa-Token 迁移与架构说明
 
+> 当前进度：已接通知识库检索问答，见 [D11 说明](13-knowledge-rag.md)。下文保留对应阶段的实现边界和验收记录。
+
 ## 结果与保护范围
 
 基于 `D:\jastudy\idea\ragent-learning` 的最新工作区实施，`D:\jastudy\idea\ragent` 仅作参考。保留已存在的未提交修改、原始压缩包（现归档 `docs/archive/main.zip`）、自定义聊天提示词、ModelClient 修改、文档解析正文/状态/失败原因。迁移前副本在被 Git 忽略的 `data/migration-baseline-20261030`。

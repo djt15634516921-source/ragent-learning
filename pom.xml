@@ -63,6 +63,11 @@
                 <version>${mybatis-plus.version}</version>
             </dependency>
             <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-jsqlparser</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>cn.dev33</groupId>
                 <artifactId>sa-token-spring-boot4-starter</artifactId>
                 <version>${sa-token.version}</version>

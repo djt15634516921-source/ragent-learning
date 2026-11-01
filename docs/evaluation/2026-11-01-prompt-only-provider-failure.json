@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-01",
+  "status": "FAILED_REAL_PROVIDER_CHECK",
+  "method": "verify-rag-provider.mjs --evidence-check，独立 PostgreSQL/Redis 与五份合成资料",
+  "changeUnderTest": "显式来源编号、强化证据约束、仅给旧助手正文增加不可信标记",
+  "question": "月泉系统每提交一张工单要收多少钱？",
+  "actualAnswer": "【Ragent学习助手】  \n月泉系统每提交一张工单需支付50元[1]。",
+  "testSetup": "仅在独立测试数据库人工加入旧错误金额回答，检查当前资料无费用时能否拒答",
+  "outcome": "仍复制旧错误金额，缺少资料拒答断言失败，不能宣布仅增加提示词已修复",
+  "applicationLog": "target/rag-provider-de1048bf/application.log",
+  "notes": [
+    "本次失败与用户原始样本不是同一输入条件：原始样本此前没有50元，本次故意植入该错误历史。",
+    "原始失败和历史污染复测失败均保留，后续调整为隔离知识库生成时的旧助手正文。"
+  ]
+}

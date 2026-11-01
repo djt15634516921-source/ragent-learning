@@ -1,0 +1,152 @@
+{
+  "date": "2026-11-01",
+  "status": "PARTIAL_MANUAL_OBSERVATION",
+  "source": "用户截图与数据库保存记录只读核对",
+  "conversationId": "chat-D1401",
+  "knowledgeBaseId": 3,
+  "knowledgeBaseName": "D14 固定评估",
+  "userMessageCount": 3,
+  "newModelCalls": 0,
+  "tenCaseIndependentBaselineCompleted": false,
+  "notes": [
+    "三次提问处于同一会话；后续问题携带先前历史，不能作为完整独立题集通过记录。",
+    "引用错误的确切成因未复现确认；旧历史引用编号可能影响当前生成，属于待验证假设。"
+  ],
+  "cases": [
+    {
+      "caseId": "Q01",
+      "answerCorrect": true,
+      "refusalCorrect": null,
+      "citationSupported": true,
+      "notes": "口令为海棠7429，[1] 指向星河项目验收资料。",
+      "actualQuestion": "星河学习项目的验收口令是什么？",
+      "priorUserTurns": 0,
+      "independentConversation": true,
+      "actualAnswer": "【Ragent学习助手】  \n根据提供的资料，星河学习项目的验收口令是“海棠7429”[1]。",
+      "sources": [
+        {
+          "citation": 1,
+          "filename": "01-星河项目验收.md",
+          "chunkIndex": 0,
+          "score": 0.8556283712387085,
+          "containsExpectedPassphrase": true,
+          "containsLinTeacher": true
+        },
+        {
+          "citation": 2,
+          "filename": "04-青禾项目验收.md",
+          "chunkIndex": 0,
+          "score": 0.7498976141275411,
+          "containsExpectedPassphrase": false,
+          "containsLinTeacher": false
+        },
+        {
+          "citation": 3,
+          "filename": "05-月泉办公空间.md",
+          "chunkIndex": 0,
+          "score": 0.5096475481987,
+          "containsExpectedPassphrase": false,
+          "containsLinTeacher": false
+        },
+        {
+          "citation": 4,
+          "filename": "02-月泉工单规则.md",
+          "chunkIndex": 0,
+          "score": 0.4378776550292969,
+          "containsExpectedPassphrase": false,
+          "containsLinTeacher": false
+        }
+      ]
+    },
+    {
+      "caseId": "Q09_variant",
+      "answerCorrect": true,
+      "refusalCorrect": true,
+      "citationSupported": false,
+      "notes": "未编造手机号；负责人林老师这一事实引用[1]，但[1]为月泉办公空间，支持该事实的是当前[2]。本题实际措辞较固定题更短。",
+      "actualQuestion": "林老师手机号是多少",
+      "priorUserTurns": 1,
+      "independentConversation": false,
+      "actualAnswer": "【Ragent学习助手】  \n根据提供的资料，星河学习项目的验收负责人是林老师[1]，但资料中未提供林老师的手机号码。因此，无法确定林老师的手机号。",
+      "sources": [
+        {
+          "citation": 1,
+          "filename": "05-月泉办公空间.md",
+          "chunkIndex": 0,
+          "score": 0.451373815536499,
+          "containsExpectedPassphrase": false,
+          "containsLinTeacher": false
+        },
+        {
+          "citation": 2,
+          "filename": "01-星河项目验收.md",
+          "chunkIndex": 0,
+          "score": 0.41557684540748596,
+          "containsExpectedPassphrase": true,
+          "containsLinTeacher": true
+        },
+        {
+          "citation": 3,
+          "filename": "02-月泉工单规则.md",
+          "chunkIndex": 0,
+          "score": 0.3956172466278076,
+          "containsExpectedPassphrase": false,
+          "containsLinTeacher": false
+        },
+        {
+          "citation": 4,
+          "filename": "04-青禾项目验收.md",
+          "chunkIndex": 0,
+          "score": 0.3939655784389039,
+          "containsExpectedPassphrase": false,
+          "containsLinTeacher": false
+        }
+      ]
+    },
+    {
+      "caseId": "Q04_variant",
+      "answerCorrect": true,
+      "refusalCorrect": null,
+      "citationSupported": true,
+      "notes": "暗号回答海棠7429，引用[1]为星河资料；实际措辞省略了部分固定题文字，且使用同一会话。",
+      "actualQuestion": "参加星河学习项目验收需要报哪个暗号",
+      "priorUserTurns": 2,
+      "independentConversation": false,
+      "actualAnswer": "【Ragent学习助手】  \n参加星河学习项目验收需要报的暗号是“海棠7429”[1]。",
+      "sources": [
+        {
+          "citation": 1,
+          "filename": "01-星河项目验收.md",
+          "chunkIndex": 0,
+          "score": 0.8438736889437638,
+          "containsExpectedPassphrase": true,
+          "containsLinTeacher": true
+        },
+        {
+          "citation": 2,
+          "filename": "04-青禾项目验收.md",
+          "chunkIndex": 0,
+          "score": 0.7224617335245926,
+          "containsExpectedPassphrase": false,
+          "containsLinTeacher": false
+        },
+        {
+          "citation": 3,
+          "filename": "05-月泉办公空间.md",
+          "chunkIndex": 0,
+          "score": 0.46681031782565685,
+          "containsExpectedPassphrase": false,
+          "containsLinTeacher": false
+        },
+        {
+          "citation": 4,
+          "filename": "02-月泉工单规则.md",
+          "chunkIndex": 0,
+          "score": 0.4183236409232838,
+          "containsExpectedPassphrase": false,
+          "containsLinTeacher": false
+        }
+      ]
+    }
+  ]
+}

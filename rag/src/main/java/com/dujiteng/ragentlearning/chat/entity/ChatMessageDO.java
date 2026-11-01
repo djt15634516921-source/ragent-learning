@@ -23,4 +23,7 @@ public class ChatMessageDO {
     public void setContent(String content) { this.content = content; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+    private String sourcesJson;
+    public String getSourcesJson() { return sourcesJson; }
+    public void setSourcesJson(String sourcesJson) { this.sourcesJson = sourcesJson; }
 }

@@ -49,6 +49,7 @@
     </section>
     <section>
       <h2>当前知识库的文档</h2>
+      <p class="hint">解析 → 切分 → 向量化，完成后可返回聊天页选择这个知识库提问。向量化会调用模型服务；相同片段和模型重复点击会复用结果。</p>
       <p id="empty">请选择知识库。</p>
       <ul id="documents"></ul>
     </section>
@@ -57,12 +58,25 @@
       <p id="text-summary" class="hint">选择一份文档查看解析结果。</p>
       <pre id="parsed-text"></pre>
     </section>
+    <section>
+      <h2>文档片段</h2>
+      <p class="hint">先解析文档，再点击文档旁的“切分文本”。相邻片段保留一部分重叠文字，帮助保留上下文。</p>
+      <label for="chunk-size">每块最多字符数</label>
+      <input id="chunk-size" type="number" min="200" max="4000" step="1" value="800">
+      <label for="chunk-overlap">相邻块重叠字符数</label>
+      <input id="chunk-overlap" type="number" min="0" max="2000" step="1" value="120">
+      <p id="chunk-summary" class="hint">选择一份已解析文档，切分或查看片段。</p>
+      <ol id="chunks"></ol>
+      <button id="chunk-prev" type="button" class="secondary" disabled>上一页</button>
+      <button id="chunk-next" type="button" class="secondary" disabled>下一页</button>
+    </section>
   </fieldset>
   <p id="status" role="status" aria-live="polite"></p>
   <script src="/auth.js"></script>
   <script>
     const $ = id => document.getElementById(id);
     let busy = false;
+    let chunkSelection = null;
     async function read(response) {
       const data = await response.json();
       if (!response.ok) {
@@ -124,7 +138,11 @@
         detail.className = 'file-detail';
         const label = {PENDING: '待处理', RUNNING: '解析中', SUCCESS: '解析完成', FAILED: '解析失败'}[row.status] || row.status;
         detail.textContent = `${label} · ${(row.size / 1024).toFixed(1)} KB · 点击文件名下载原文件`;
+        if (row.status === 'SUCCESS') detail.textContent += row.chunkStatus === 'SUCCESS'
+          ? ' · 已切分 ' + row.chunkCount + ' 块' : ' · 待切分';
+        detail.textContent += ' · ' + ({PENDING:'待向量化', RUNNING:'向量化中', SUCCESS:'已向量化 ' + row.indexCount + ' 块', FAILED:'向量化失败'}[row.indexStatus] || '待向量化');
         item.append(link, detail);
+        if (row.indexError) { const failure = document.createElement('span'); failure.className = 'file-detail'; failure.textContent = row.indexError; item.append(failure); }
         if (row.errorMessage) {
           const failure = document.createElement('span');
           failure.className = 'file-detail';
@@ -136,6 +154,7 @@
         parse.className = 'secondary';
         parse.textContent = row.status === 'SUCCESS' ? '重新解析' : row.status === 'FAILED' ? '重试解析' : '解析文本';
         parse.addEventListener('click', () => run(async () => {
+          clearChunks('原文解析后，请重新切分以查看最新片段。');
           $('text-summary').textContent = `正在解析：${row.filename}`;
           $('parsed-text').textContent = '';
           $('status').textContent = '正在提取文本，请稍候…';
@@ -157,10 +176,71 @@
           showText(row.filename, await get(`/api/knowledge-bases/${id}/documents/${row.id}/text`));
           $('status').textContent = '';
         }));
-        item.append(parse, preview);
+        const split = document.createElement('button');
+        split.type = 'button'; split.className = 'secondary';
+        split.textContent = row.chunkStatus === 'SUCCESS' ? '重新切分' : '切分文本';
+        split.disabled = row.status !== 'SUCCESS';
+        split.addEventListener('click', () => run(async () => {
+          if (!$('chunk-size').reportValidity() || !$('chunk-overlap').reportValidity()) return;
+          await post(
+            '/api/knowledge-bases/' + id + '/documents/' + row.id + '/chunks',
+            JSON.stringify({chunkSize: Number($('chunk-size').value), overlap: Number($('chunk-overlap').value)}), true);
+          await loadChunks(id, row.id, 1);
+          await documents();
+          $('status').textContent = '“' + row.filename + '”切分完成';
+        }));
+        const chunks = document.createElement('button');
+        chunks.type = 'button'; chunks.className = 'secondary'; chunks.textContent = '查看片段';
+        chunks.addEventListener('click', () => run(async () => {
+          await loadChunks(id, row.id, 1); $('status').textContent = '';
+        }));
+        const index = document.createElement('button');
+        index.type = 'button'; index.className = 'secondary';
+        index.textContent = row.indexStatus === 'FAILED' ? '重试向量化' : '向量化';
+        index.disabled = row.chunkStatus !== 'SUCCESS' || row.indexStatus === 'RUNNING';
+        index.addEventListener('click', () => run(async () => {
+          $('status').textContent = '正在向量化，将分批调用 Embedding 服务，请稍候…';
+          try {
+            const result = await post('/api/knowledge-bases/' + id + '/documents/' + row.id + '/index', '');
+            $('status').textContent = '“' + row.filename + '”向量化完成 · ' + result.count + ' 块，可返回聊天页提问';
+          } finally { await documents(); }
+        }));
+        item.append(parse, preview, split, chunks, index);
         $('documents').append(item);
       }
     }
+    function clearChunks(message = '选择一份已解析文档，切分或查看片段。') {
+      chunkSelection = null;
+      $('chunks').replaceChildren();
+      $('chunk-summary').textContent = message;
+      $('chunk-prev').disabled = $('chunk-next').disabled = true;
+    }
+    async function loadChunks(baseId, documentId, page) {
+      const result = await get('/api/knowledge-bases/' + baseId + '/documents/' + documentId + '/chunks?page=' + page + '&size=5');
+      $('chunks').replaceChildren();
+      chunkSelection = {baseId, documentId, page};
+      const pages = Math.max(1, Math.ceil(result.total / result.size));
+      $('chunk-summary').textContent = result.chunkStatus === 'SUCCESS'
+        ? result.filename + ' · 共 ' + result.total + ' 块 · 第 ' + page + '/' + pages + ' 页'
+        : result.documentStatus === 'SUCCESS' ? result.filename + ' · 尚未切分，请点击“切分文本”。'
+        : result.filename + ' · 请先成功解析文档，再切分文本。';
+      for (const chunk of result.chunks) {
+        const item = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = '第 ' + (chunk.chunkIndex + 1) + ' 块 · 编号 ' + chunk.id + ' · ' + chunk.characterCount
+          + ' 字符 · 原文位置 [' + chunk.startOffset + ', ' + chunk.endOffset + ')';
+        const content = document.createElement('pre'); content.textContent = chunk.content;
+        item.append(title, content); $('chunks').append(item);
+      }
+      $('chunk-prev').disabled = page <= 1;
+      $('chunk-next').disabled = page * result.size >= result.total;
+    }
+    $('chunk-prev').addEventListener('click', () => run(async () => {
+      if (chunkSelection) await loadChunks(chunkSelection.baseId, chunkSelection.documentId, chunkSelection.page - 1);
+    }));
+    $('chunk-next').addEventListener('click', () => run(async () => {
+      if (chunkSelection) await loadChunks(chunkSelection.baseId, chunkSelection.documentId, chunkSelection.page + 1);
+    }));
     function showText(filename, result) {
       $('text-summary').textContent = `${filename} · ${result.characterCount} 字符`;
       $('parsed-text').textContent = result.status === 'SUCCESS' ? result.text
@@ -200,6 +280,7 @@
       });
     });
     $('knowledge-base').addEventListener('change', () => run(async () => {
+      clearChunks();
       $('text-summary').textContent = '选择一份文档查看解析结果。';
       $('parsed-text').textContent = '';
       await documents(); $('status').textContent = '';

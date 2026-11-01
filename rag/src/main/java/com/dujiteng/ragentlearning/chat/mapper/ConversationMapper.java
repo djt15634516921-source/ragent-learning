@@ -8,6 +8,6 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface ConversationMapper extends BaseMapper<ChatConversationDO> {
-    @Insert("INSERT INTO chat_conversation (conversation_id, user_id) VALUES (#{conversationId}, #{userId}) ON CONFLICT (conversation_id) DO NOTHING")
-    int createIfAbsent(@Param("userId") long userId, @Param("conversationId") String conversationId);
+    @Insert("INSERT INTO chat_conversation (conversation_id, user_id, knowledge_base_id) VALUES (#{conversationId}, #{userId}, #{knowledgeBaseId}) ON CONFLICT (conversation_id) DO NOTHING")
+    int createIfAbsent(@Param("userId") long userId, @Param("conversationId") String conversationId, @Param("knowledgeBaseId") Long knowledgeBaseId);
 }

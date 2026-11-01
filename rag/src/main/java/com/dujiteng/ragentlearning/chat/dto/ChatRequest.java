@@ -1,5 +1,6 @@
 package com.dujiteng.ragentlearning.chat.dto;
 
-/** 同一段聊天使用相同的 conversationId；每次只提交新的 question。 */
-public record ChatRequest(String conversationId, String question) {
+/** knowledgeBaseId 为空时普通聊天；同一会话固定知识库，切换时新建会话。 */
+public record ChatRequest(String conversationId, String question, Long knowledgeBaseId) {
+    public ChatRequest(String conversationId, String question) { this(conversationId, question, null); }
 }

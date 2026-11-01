@@ -16,7 +16,11 @@ public class ApiResponseHeaders extends OncePerRequestFilter {
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("Referrer-Policy", "no-referrer");
         response.setHeader("X-Frame-Options", "DENY");
-        if (request.getServletPath().startsWith("/api/")) response.setHeader("Cache-Control", "no-store");
+        String path = request.getServletPath();
+        // 学习页随接口协议一起变化，浏览器复用旧页面会漏传 knowledgeBaseId 等新字段。
+        if (path.startsWith("/api/") || path.endsWith(".html") || path.equals("/auth.js")) {
+            response.setHeader("Cache-Control", "no-store");
+        }
         chain.doFilter(request, response);
     }
 }

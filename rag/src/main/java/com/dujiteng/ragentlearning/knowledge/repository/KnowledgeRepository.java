@@ -2,6 +2,7 @@ package com.dujiteng.ragentlearning.knowledge.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.dujiteng.ragentlearning.common.ChatApiException;
+import com.dujiteng.ragentlearning.infra.embedding.EmbeddingClient;
 import com.dujiteng.ragentlearning.knowledge.entity.KnowledgeBaseDO;
 import com.dujiteng.ragentlearning.knowledge.entity.KnowledgeDocumentDO;
 import com.dujiteng.ragentlearning.knowledge.mapper.KnowledgeBaseMapper;
@@ -17,9 +18,11 @@ import org.springframework.stereotype.Repository;
 /** 封装资源归属与 DO 到 VO 的转换，Mapper 负责实际数据库访问。 */
 @Repository
 public class KnowledgeRepository {
+    private final EmbeddingClient embedding;
     private final KnowledgeBaseMapper bases;
     private final KnowledgeDocumentMapper documents;
-    public KnowledgeRepository(KnowledgeBaseMapper bases, KnowledgeDocumentMapper documents) {
+    public KnowledgeRepository(KnowledgeBaseMapper bases, KnowledgeDocumentMapper documents, EmbeddingClient embedding) {
+        this.embedding = embedding;
         this.bases = bases;
         this.documents = documents;
     }
@@ -53,7 +56,7 @@ public class KnowledgeRepository {
     }
     public List<DocumentVO> listDocuments(long userId, long knowledgeBaseId) {
         requireOwner(userId, knowledgeBaseId);
-        return documents.listOwned(userId, knowledgeBaseId).stream().map(KnowledgeRepository::view).toList();
+        return documents.listOwned(userId, knowledgeBaseId).stream().map(this::view).toList();
     }
     public DocumentRecord findDocument(long userId, long knowledgeBaseId, long documentId) {
         var row = documents.findOwned(userId, knowledgeBaseId, documentId);
@@ -81,10 +84,16 @@ public class KnowledgeRepository {
         return new KnowledgeBaseVO(row.getId(), row.getName(), row.getDescription(), row.getCreatedAt().toInstant());
     }
 
-    private static DocumentVO view(KnowledgeDocumentDO row) {
+    private DocumentVO view(KnowledgeDocumentDO row) {
         return new DocumentVO(row.getId(), row.getKnowledgeBaseId(), row.getOriginalFilename(), row.getFileType(),
                 row.getFileSize(), row.getStatus(), row.getCreatedAt().toInstant(), row.getErrorMessage(),
-                row.getParsedAt() == null ? null : row.getParsedAt().toInstant());
+                row.getParsedAt() == null ? null : row.getParsedAt().toInstant(),
+                DocumentChunkRepository.isChunked(row) ? "SUCCESS" : "PENDING",
+                DocumentChunkRepository.isChunked(row) ? row.getChunkCount() : 0,
+                DocumentChunkRepository.isChunked(row) && row.getChunkedAt() != null ? row.getChunkedAt().toInstant() : null,
+                DocumentVectorRepository.ready(row, embedding.profile()) ? "SUCCESS"
+                    : "SUCCESS".equals(row.getIndexStatus()) ? "PENDING" : row.getIndexStatus(),
+                DocumentVectorRepository.ready(row, embedding.profile()) ? row.getIndexCount() : 0, row.getIndexError());
     }
 
     private static ChatApiException missing() {

@@ -50,7 +50,7 @@ public class ChatController {
     public ChatResponseVO chat(@RequestBody ChatRequest request) {
         String id = request == null ? null : request.conversationId();
         String question = request == null ? null : request.question();
-        return new ChatResponseVO(chatService.chat(StpUtil.getLoginIdAsLong(), id, question));
+        return chatService.chat(StpUtil.getLoginIdAsLong(), id, question, request == null ? null : request.knowledgeBaseId());
     }
 
     @GetMapping("/conversations")
@@ -71,7 +71,8 @@ public class ChatController {
                 request == null ? null : request.question());
         // 身份在请求线程确定，再把普通 long 变量传进线程池；不用 worker 中的 ThreadLocal 猜用户。
         long userId = StpUtil.getLoginIdAsLong();
-        chatService.prepareConversation(userId, input.conversationId());
+        Long knowledgeBaseId = request == null ? null : request.knowledgeBaseId();
+        chatService.prepareConversation(userId, input.conversationId(), knowledgeBaseId);
         SseEmitter emitter = new SseEmitter(streamTimeoutMs);
         StreamCancellation cancellation = new StreamCancellation();
         AtomicBoolean terminal = new AtomicBoolean();
@@ -103,7 +104,7 @@ public class ChatController {
             Future<?> future = streamExecutor.submit(() -> {
                 try {
                     send(emitter, cancellation, "start", Map.of("conversationId", input.conversationId()));
-                    String answer = chatService.streamChat(userId, input.conversationId(), input.question(), text -> {
+                    ChatResponseVO result = chatService.streamChat(userId, input.conversationId(), input.question(), knowledgeBaseId, text -> {
                         if (terminal.get()) {
                             throw new StreamCancellation.Cancelled();
                         }
@@ -111,7 +112,7 @@ public class ChatController {
                     }, cancellation);
                     cancellation.check();
                     if (terminal.compareAndSet(false, true)) {
-                        send(emitter, cancellation, "done", Map.of("answer", answer));
+                        send(emitter, cancellation, "done", result);
                         emitter.complete();
                     }
                 } catch (StreamCancellation.Cancelled ignored) {
@@ -136,7 +137,7 @@ public class ChatController {
     }
 
     private static void send(SseEmitter emitter, StreamCancellation cancellation,
-                             String event, Map<String, String> data) {
+                             String event, Object data) {
         cancellation.check();
         try {
             emitter.send(SseEmitter.event().name(event).data(data, MediaType.APPLICATION_JSON));

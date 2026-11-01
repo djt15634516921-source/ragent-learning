@@ -53,3 +53,50 @@ ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS error_message VARCHAR(50
 ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS parsed_at TIMESTAMPTZ;
 ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS parse_started_at TIMESTAMPTZ;
 ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS parse_token VARCHAR(36);
+
+-- D10：切分元数据与独立片段表。已有文档/正文/主键/归属保持不变。
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS parse_version BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS chunk_version BIGINT;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS chunk_size INTEGER;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS chunk_overlap INTEGER;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS chunk_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS chunked_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS knowledge_chunk (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    document_id BIGINT NOT NULL REFERENCES knowledge_document(id) ON DELETE CASCADE,
+    source_version BIGINT NOT NULL,
+    chunk_index INTEGER NOT NULL CHECK (chunk_index >= 0),
+    content TEXT NOT NULL,
+    character_count INTEGER NOT NULL CHECK (character_count > 0),
+    start_offset INTEGER NOT NULL CHECK (start_offset >= 0),
+    end_offset INTEGER NOT NULL CHECK (end_offset > start_offset),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (document_id, chunk_index),
+    CHECK (character_count = end_offset - start_offset AND char_length(content) = character_count)
+);
+
+-- D11：增量启用向量能力；不修改已有文档、消息与归属。
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS chunk_revision BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS index_status VARCHAR(16) NOT NULL DEFAULT 'PENDING';
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS index_error VARCHAR(500);
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS index_started_at TIMESTAMPTZ;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS index_token VARCHAR(36);
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS indexed_revision BIGINT;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS index_model VARCHAR(100);
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS index_profile VARCHAR(64);
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS index_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE knowledge_document ADD COLUMN IF NOT EXISTS indexed_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS knowledge_chunk_vector (
+    chunk_id BIGINT PRIMARY KEY REFERENCES knowledge_chunk(id) ON DELETE CASCADE,
+    source_version BIGINT NOT NULL,
+    chunk_revision BIGINT NOT NULL,
+    embedding_profile VARCHAR(64) NOT NULL,
+    embedding_model VARCHAR(100) NOT NULL,
+    embedding VECTOR(1024) NOT NULL,
+    indexed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE chat_conversation ADD COLUMN IF NOT EXISTS knowledge_base_id BIGINT REFERENCES knowledge_base(id);
+ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS sources_json JSONB NOT NULL DEFAULT '[]'::jsonb
+    CHECK (jsonb_typeof(sources_json) = 'array');

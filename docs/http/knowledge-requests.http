@@ -38,3 +38,14 @@ Authorization: Bearer {{token}}
 ### 下载只在请求头携带 Token，不放 URL
 GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/file
 Authorization: Bearer {{token}}
+
+### 切分：先成功解析文档；相同原文/参数复用已有片段
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/chunks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"chunkSize":800,"overlap":120}
+
+### 按顺序分页查看正文片段及来源
+GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/chunks?page=1&size=5
+Authorization: Bearer {{token}}

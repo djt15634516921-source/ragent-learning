@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "title": "D14 最小 RAG 固定问题集",
+  "status": "PREPARED_NOT_RUN",
+  "sourceDirectory": "docs/examples/rag-eval",
+  "baseline": {
+    "chunkSize": 800,
+    "overlap": 120,
+    "topK": 4,
+    "minScore": 0.35,
+    "embeddingModel": "text-embedding-v4",
+    "dimensions": 1024
+  },
+  "cases": [
+    {
+      "id": "Q01",
+      "category": "direct_fact",
+      "question": "星河学习项目的验收口令是什么？",
+      "answerable": true,
+      "requiredEvidence": [{"file": "01-星河项目验收.md", "text": "星河学习项目的验收口令是海棠7429。"}],
+      "expectedFacts": ["星河学习项目的验收口令为海棠7429"],
+      "note": "松涛3816 属于青禾项目，海风6284 属于办公空间，均不能作为本题答案。"
+    },
+    {
+      "id": "Q02",
+      "category": "direct_fact",
+      "question": "谁负责星河学习项目的验收？",
+      "answerable": true,
+      "requiredEvidence": [{"file": "01-星河项目验收.md", "text": "星河学习项目的验收负责人是林老师。"}],
+      "expectedFacts": ["验收负责人是林老师"]
+    },
+    {
+      "id": "Q03",
+      "category": "time_fact",
+      "question": "星河学习项目每周什么时候验收？请说出星期和时间。",
+      "answerable": true,
+      "requiredEvidence": [{"file": "01-星河项目验收.md", "text": "星河学习项目的验收时间为每周四下午三点。"}],
+      "expectedFacts": ["每周四", "下午三点（15:00）"]
+    },
+    {
+      "id": "Q04",
+      "category": "paraphrase",
+      "question": "参加星河学习项目验收，需要报哪个暗号？",
+      "answerable": true,
+      "requiredEvidence": [{"file": "01-星河项目验收.md", "text": "星河学习项目的验收口令是海棠7429。"}],
+      "expectedFacts": ["验收暗号指海棠7429"],
+      "note": "检验换一种说法后是否仍能找到同一事实。"
+    },
+    {
+      "id": "Q05",
+      "category": "exact_identifier",
+      "question": "月泉系统本次演示的工单编号是什么？",
+      "answerable": true,
+      "requiredEvidence": [{"file": "02-月泉工单规则.md", "text": "月泉系统本次演示的工单编号是 GX-7316。"}],
+      "expectedFacts": ["GX-7316"]
+    },
+    {
+      "id": "Q06",
+      "category": "numeric_fact",
+      "question": "月泉系统工单最晚多久要首次回复？",
+      "answerable": true,
+      "requiredEvidence": [{"file": "02-月泉工单规则.md", "text": "月泉系统工单的首次回复时限为两个工作日。"}],
+      "expectedFacts": ["两个工作日内首次回复"],
+      "note": "不能把工作日改成自然日，也不能声称两个工作日内必须解决工单。"
+    },
+    {
+      "id": "Q07",
+      "category": "multiple_facts",
+      "question": "按照资料，Controller、Service、Mapper 分别负责什么？",
+      "answerable": true,
+      "requiredEvidence": [
+        {"file": "03-后端组件职责.md", "text": "Controller 负责接收请求、获取后端验证过的当前用户，并调用业务 Service。"},
+        {"file": "03-后端组件职责.md", "text": "Service 负责组织业务流程，协调 Mapper、模型客户端和其他组件。"},
+        {"file": "03-后端组件职责.md", "text": "Mapper 负责执行数据库查询和写入。"}
+      ],
+      "expectedFacts": ["Controller 接收请求、获取可信用户并调用 Service", "Service 组织业务和协调组件", "Mapper 读写数据库"]
+    },
+    {
+      "id": "Q08",
+      "category": "cross_document",
+      "question": "月泉系统工单的首次回复时限是多少？另外，星河学习项目每周什么时候验收？",
+      "answerable": true,
+      "requiredEvidence": [
+        {"file": "02-月泉工单规则.md", "text": "月泉系统工单的首次回复时限为两个工作日。"},
+        {"file": "01-星河项目验收.md", "text": "星河学习项目的验收时间为每周四下午三点。"}
+      ],
+      "expectedFacts": ["月泉系统工单首次回复时限为两个工作日", "星河学习项目每周四下午三点验收"],
+      "note": "两份资料的证据都需检查，只答出其中一部分应记录为不完整。"
+    },
+    {
+      "id": "Q09",
+      "category": "unanswerable",
+      "question": "星河学习项目验收负责人林老师的手机号码是多少？",
+      "answerable": false,
+      "requiredEvidence": [],
+      "expectedFacts": ["明确说明当前资料没有提供手机号码，不编造号码或后台登记结果"],
+      "note": "允许命中负责人相关片段。命中片段不代表片段包含手机号码，不能要求 sources 必须为空。"
+    },
+    {
+      "id": "Q10",
+      "category": "unanswerable",
+      "question": "月泉系统每提交一张工单要收多少钱？",
+      "answerable": false,
+      "requiredEvidence": [],
+      "expectedFacts": ["明确说明当前资料没有提供收费信息，不编造金额，也不能擅自断言免费"],
+      "note": "检索到工单规则也可能缺少费用信息，需检查回答是否说明证据不足。"
+    }
+  ]
+}

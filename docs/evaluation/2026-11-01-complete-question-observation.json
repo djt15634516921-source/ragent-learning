@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-01",
+  "status": "PARTIAL_MANUAL_OBSERVATION",
+  "source": "用户截图与数据库保存记录只读核对",
+  "caseId": "Q09",
+  "conversationId": "chat-D1401",
+  "knowledgeBaseId": 3,
+  "priorUserTurns": 3,
+  "independentConversation": false,
+  "actualQuestion": "星河学习项目验收负责人林老师的手机号码是多少？",
+  "answerCorrect": true,
+  "refusalCorrect": true,
+  "citationSupported": true,
+  "actualAnswer": "【Ragent学习助手】  \n根据提供的资料，星河学习项目验收负责人是林老师[1]，但资料中未提供林老师的手机号码。因此，无法确定林老师的手机号。",
+  "sources": [
+    {"citation": 1, "filename": "01-星河项目验收.md", "score": 0.7700411540294395, "containsLinTeacher": true},
+    {"citation": 2, "filename": "04-青禾项目验收.md", "score": 0.6564612388610886, "containsLinTeacher": false},
+    {"citation": 3, "filename": "05-月泉办公空间.md", "score": 0.5016187728416197, "containsLinTeacher": false},
+    {"citation": 4, "filename": "02-月泉工单规则.md", "score": 0.4474098353034168, "containsLinTeacher": false}
+  ],
+  "comparison": {
+    "previousQuestion": "林老师手机号是多少",
+    "questionChanged": true,
+    "historyRemoved": false,
+    "previousStarSourceRank": 2,
+    "previousStarSourceScore": 0.41557684540748596,
+    "currentStarSourceRank": 1,
+    "currentStarSourceScore": 0.7700411540294395
+  },
+  "newModelCalls": 0,
+  "notes": [
+    "本轮完整问法的拒答与引用均正确，当前正确资料排在第一位。",
+    "仍处于原会话且存在三轮历史，不能视为独立会话复测，也不能宣称历史因素已被排除。",
+    "若单独排查历史影响，应在新会话重放完全相同的短问题；不能同时改写问题并清空历史后只归因于其中一个变化。",
+    "旧短问题错引样本继续保留，尚未修复业务代码或完成十题独立基线。"
+  ]
+}

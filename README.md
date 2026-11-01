@@ -1,13 +1,13 @@
 # Ragent 学习工程
 
-现有工程已实现普通/流式聊天、多轮历史与 PostgreSQL 持久化、注册登录与用户隔离、知识库管理、文档上传下载和 TXT/Markdown/PDF/DOCX 文本解析。当前统一为 **MyBatis-Plus + Sa-Token + Redis**，采用 framework、infra-ai、system、rag、bootstrap 五个 Maven 模块。
+现有工程已实现普通/流式聊天、多轮历史与 PostgreSQL 持久化、注册登录与用户隔离、知识库管理、文档上传下载、TXT/Markdown/PDF/DOCX 文本解析，带来源和重叠的文档切分，以及基于 Embedding + pgvector 的知识库问答（普通/流式回答及来源）。当前统一为 **MyBatis-Plus + Sa-Token + Redis**，采用 framework、infra-ai、system、rag、bootstrap 五个 Maven 模块。
 
 学习工程：`D:\jastudy\idea\ragent-learning`。参考工程：`D:\jastudy\idea\ragent`。
 
 ## 本机启动
 
 1. 启动 PostgreSQL 和 Redis。现有 Redis 对外端口为 6379；密码以原项目 `bootstrap/src/main/resources/application.yaml` 为准，不要依赖记忆中的值。
-2. IDEA 运行配置的 Environment variables 中保留 DB_PASSWORD 和原来的模型变量，增加 REDIS_PASSWORD。`.env.example` 仅供填写参考，Spring Boot **不会自动读取 `.env`**。
+2. IDEA 运行配置的 Environment variables 中保留 DB_PASSWORD 和原来的模型变量。在同一处配置 REDIS_PASSWORD，保存后重新启动应用。`.env.example` 仅供填写参考，Spring Boot **不会自动读取 `.env`**。
 3. Maven 重新加载根 pom.xml。运行 RagentLearningApplication 时，模块类路径选择 bootstrap，工作目录设为 D:\jastudy\idea\ragent-learning，沿用原有环境变量。停止旧进程后再运行新配置。
 4. 同一标签页打开 [登录和聊天页](http://localhost:18081/login-test.html)，注册后登录，通过页内链接进入 [知识库页](http://localhost:18081/knowledge-test.html)。[独立 SSE 页](http://localhost:18081/stream-test.html) 也使用同一标签页凭证。
 
@@ -26,6 +26,8 @@
 | CHAT_STREAM_TIMEOUT_MS | 默认 90000 毫秒，超时取消生成 |
 | KNOWLEDGE_STORAGE_ROOT | 默认 data/knowledge，沿用已有原文件目录 |
 | LLM_CHAT_URL / LLM_MODEL / LLM_API_KEY | 沿用现有可用模型配置，参数不变 |
+| EMBEDDING_URL / MODEL / API_KEY | 地址默认从聊天地址派生；模型 text-embedding-v4、1024 维；密钥默认复用 LLM_API_KEY |
+| RAG_TOP_K / RAG_MIN_SCORE / RAG_MAX_INDEX_CHUNKS | 默认 4 / 0.35 / 500，控制召回与单文档向量化规模 |
 
 ## 当前认证协议
 
@@ -39,6 +41,9 @@
 
 ## 代码与学习说明
 
+- [当前 D11：知识库检索问答与实际调用链](docs/13-knowledge-rag.md)。
+- [D14：固定十题评估、资料与排错记录](docs/14-rag-evaluation.md)：先记录当前结果，再验证后续检索改动。
+- [D10：文档切分、来源与页面验收](docs/12-document-chunking.md)。
 - [多模块目录、依赖与开发流程](docs/11-maven-modules.md)：当前工程组织与启动方式。
 - [开发规范](AGENTS.md)：必须遵守与可选建议。
 - [迁移结果、包结构、三条调用链、原项目对应和验证](docs/10-migration-architecture.md)。
@@ -49,7 +54,7 @@
 
 DO 映射表，DTO 接收参数，VO 限制响应；Controller 注入 Service 接口，Impl 组织业务，Mapper 访问数据库。保留有实际归属和事务职责的 Repository，没有手写 MapperImpl 或强制继承通用 IService。
 
-本轮不改已有表结构，不重新分配资源归属，继续沿用幂等 SQL 初始化。迁移前工作区备份在被忽略的 `data/migration-baseline-20261030`，不作为源码提交。原始压缩包保存在 docs/archive/main.zip，自定义模型提示词保留。多模块迁移前备份见第 11 步。
+框架迁移保留了旧表结构；D10 在现有幂等 SQL 末尾新增片段表和正文/切分版本字段，不重新分配资源归属。D11 增量启用 pgvector、向量索引状态、切分批次、会话知识库与消息来源，不删除旧记录。迁移前工作区备份在被忽略的 `data/migration-baseline-20261030`，不作为源码提交。原始压缩包保存在 docs/archive/main.zip，自定义模型提示词保留。多模块迁移前备份见第 11 步。
 
 ## 验证
 
@@ -68,4 +73,10 @@ $env:RUN_BROWSER_CHECK = 'true'
 node scripts/verify-knowledge.mjs
 ```
 
-报告与日志在 `target/knowledge-test-<随机编号>/`。Maven verify 负责构建，业务回归由 Node 脚本执行。实际通过项与未验证项见第 11 步验收记录，不能把编译通过等同于全部功能通过。
+报告与日志在 `target/knowledge-test-<随机编号>/`。Maven verify 负责构建，业务回归由 Node 脚本执行。最新结果包含 9 个算法单元测试、集成/浏览器检查和真实百炼最小 RAG 闭环；准确数量与未验证项见 [D11 验收记录](docs/13-knowledge-rag-verification.md)，不能把编译通过等同于全部功能通过。
+
+## 本机 Redis 登录错误排查
+
+出现 503 AUTH_SESSION_UNAVAILABLE 时先检查 Redis 和密码。运行配置缺少 REDIS_PASSWORD 时，应用仍可能启动，但登录时 Redis 会拒绝读取会话。当前统一在 IDEA 运行配置的 Environment variables 中添加 REDIS_PASSWORD，保存后重新启动应用。
+
+本机 Redis 连接已验证。数据库密码、Redis 密码和模型参数继续使用现有运行配置的环境变量，工作目录保持 D:\jastudy\idea\ragent-learning。

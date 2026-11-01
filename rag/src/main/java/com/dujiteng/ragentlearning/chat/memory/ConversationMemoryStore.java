@@ -1,7 +1,9 @@
 package com.dujiteng.ragentlearning.chat.memory;
 
+import com.dujiteng.ragentlearning.chat.vo.ChatMessageVO;
 import com.dujiteng.ragentlearning.chat.vo.ConversationVO;
 import com.dujiteng.ragentlearning.common.ChatApiException;
+import com.dujiteng.ragentlearning.knowledge.vo.RetrievedSourceVO;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,9 +21,9 @@ public class ConversationMemoryStore {
 
     public ConversationMemoryStore(ChatMemoryRepository repository) { this.repository = repository; }
 
-    public Conversation getOrCreate(long userId, String conversationId) {
+    public Conversation getOrCreate(long userId, String conversationId, Long knowledgeBaseId) {
         try {
-            repository.ensureOwned(userId, conversationId);
+            repository.ensureOwned(userId, conversationId, knowledgeBaseId);
         } catch (DataAccessException | TransactionException error) {
             throw databaseFailure("CHAT_CONVERSATION_FAILED", "检查或创建会话失败，请检查数据库连接", error);
         }
@@ -30,9 +32,9 @@ public class ConversationMemoryStore {
     }
 
     /** 用于显示最近历史；读取接口不创建新会话。 */
-    public List<Map<String, String>> history(long userId, String conversationId) {
+    public List<ChatMessageVO> history(long userId, String conversationId) {
         try {
-            return repository.loadRecentMessages(userId, conversationId, MAX_TURNS * 2);
+            return repository.loadRecentHistory(userId, conversationId, MAX_TURNS * 2);
         } catch (DataAccessException | TransactionException error) {
             throw databaseFailure("CHAT_HISTORY_LOAD_FAILED", "读取聊天历史失败，请检查数据库连接和表结构", error);
         }
@@ -67,9 +69,9 @@ public class ConversationMemoryStore {
             }
         }
 
-        public synchronized void appendTurn(String question, String answer) {
+        public synchronized void appendTurn(String question, String answer, List<RetrievedSourceVO> sources) {
             try {
-                repository.appendTurn(userId, conversationId, question, answer);
+                repository.appendTurn(userId, conversationId, question, answer, sources);
             } catch (DataAccessException | TransactionException error) {
                 throw databaseFailure("CHAT_HISTORY_SAVE_FAILED", "保存聊天记录失败，请检查数据库并确认记录后再重试", error);
             }

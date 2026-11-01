@@ -18,6 +18,8 @@
     button:disabled { opacity: .5; cursor: default; }
     fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
     .hint,[role=status] { color: #52627a; font-size: 14px; }
+    #knowledge-mode-status { padding: 10px 12px; border-radius: 6px; background: #fff3d4; color: #624900; font-weight: 600; }
+    #knowledge-mode-status[data-knowledge=true] { background: #edf4ff; color: #234d9a; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin-bottom: 0; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     @media(max-width:600px) { .row { grid-template-columns: 1fr; gap: 0; } }
@@ -43,6 +45,10 @@
   <section>
     <h2>会话</h2>
     <fieldset id="chat-fields" disabled>
+      <label for="chat-knowledge-base">回答依据</label>
+      <select id="chat-knowledge-base"><option value="">普通聊天</option></select>
+      <p id="knowledge-mode-status" role="status">当前模式：普通聊天 · 未使用知识库</p>
+      <p class="hint">选择知识库后只依据已向量化资料回答，并展示来源。切换知识库会新建会话。</p>
       <label for="saved-conversations">我的最近会话</label>
       <select id="saved-conversations"><option value="">请选择，或新建会话</option></select>
       <button id="new-conversation" type="button" class="secondary">新建会话</button>
@@ -60,7 +66,7 @@
     </fieldset>
     <p class="hint">聊天历史会保存。服务重启后，未过期的登录仍有效。关闭当前标签页会清理本页登录凭证。</p>
   </section>
-  <section><h2>本次回答</h2><div id="chat-status" role="status">请先登录</div><pre id="answer"></pre></section>
+  <section><h2>本次回答</h2><div id="chat-status" role="status">请先登录</div><pre id="answer"></pre><div id="sources"></div></section>
   <section><h2>最近历史</h2><p class="hint">显示当前会话最近 6 轮；更早的成功记录仍保留。</p><pre id="history">尚未选择会话</pre></section>
   <script src="/auth.js"></script>
   <script>
@@ -86,6 +92,8 @@
     window.addEventListener('ragent-auth-expired', () => {
       if (aborter) aborter.abort();
       showUser(null);
+      $('answer').textContent = ''; $('sources').replaceChildren();
+      $('history').textContent = '请重新登录';
       $('auth-status').textContent = '登录已失效，请重新登录';
     });
     function showUser(user) {
@@ -97,26 +105,56 @@
       $('username').disabled = !!user;
       $('password').disabled = !!user;
       $('auth-status').textContent = user ? `已登录：${user.username} · 用户编号 ${user.userId}` : '尚未登录';
+      updateKnowledgeMode();
+    }
+    function updateKnowledgeMode() {
+      const select = $('chat-knowledge-base');
+      $('knowledge-mode-status').dataset.knowledge = String(!!select.value);
+      $('knowledge-mode-status').textContent = select.value
+        ? '当前模式：知识库问答 · ' + select.selectedOptions[0].textContent
+        : '当前模式：普通聊天 · 未使用知识库';
     }
     function newConversation() {
       $('conversation-id').value = 'chat-' + crypto.randomUUID();
       $('saved-conversations').value = '';
-      $('answer').textContent = '';
+      $('answer').textContent = ''; $('sources').replaceChildren();
       $('history').textContent = '新会话，尚无消息';
       $('chat-status').textContent = '可以发送问题';
+      updateKnowledgeMode();
     }
     async function refreshConversations() {
       const items = await getJson('/api/conversations');
       const select = $('saved-conversations');
       select.replaceChildren(new Option('请选择，或新建会话', ''));
-      for (const item of items) select.add(new Option(item.conversationId, item.conversationId));
+      for (const item of items) {
+        const option = new Option(item.conversationId + (item.knowledgeBaseId ? ' · 知识库问答' : ' · 普通聊天'), item.conversationId);
+        option.dataset.knowledgeBaseId = item.knowledgeBaseId == null ? '' : String(item.knowledgeBaseId);
+        select.add(option);
+      }
       select.value = items.some(x => x.conversationId === $('conversation-id').value) ? $('conversation-id').value : '';
+    }
+    async function refreshKnowledgeBases() {
+      const selected = $('chat-knowledge-base').value;
+      const items = await getJson('/api/knowledge-bases');
+      $('chat-knowledge-base').replaceChildren(new Option('普通聊天', ''));
+      for (const item of items) $('chat-knowledge-base').add(new Option(item.name, String(item.id)));
+      if (items.some(item => String(item.id) === selected)) $('chat-knowledge-base').value = selected;
+      updateKnowledgeMode();
+    }
+    function showSources(sources = []) {
+      $('sources').replaceChildren();
+      sources.forEach((source, i) => {
+        const item = document.createElement('details'), title = document.createElement('summary');
+        title.textContent = '[' + (i + 1) + '] ' + source.filename + ' · 第 ' + (source.chunkIndex + 1) + ' 块 · 相似度 ' + source.score.toFixed(3);
+        const text = document.createElement('pre'); text.textContent = source.content;
+        item.append(title, text); $('sources').append(item);
+      });
     }
     async function loadHistory() {
       const cid = $('conversation-id').value.trim();
       if (!cid) throw new Error('请先填写会话编号');
       const messages = await getJson('/api/conversations/' + encodeURIComponent(cid) + '/messages');
-      $('history').textContent = messages.length ? messages.map(m => `${m.role === 'user' ? '我' : '助手'}：${m.content}`).join('\n\n') : '尚无成功保存的消息';
+      $('history').textContent = messages.length ? messages.map(m => `${m.role === 'user' ? '我' : '助手'}：${m.content}${m.sources?.length ? '\n来源：' + m.sources.map((x, i) => '[' + (i+1) + '] ' + x.filename + ' 第' + (x.chunkIndex+1) + '块').join('；') : ''}`).join('\n\n') : '尚无成功保存的消息';
     }
     $('auth-form').addEventListener('submit', async event => {
       event.preventDefault();
@@ -130,7 +168,7 @@
         $('password').value = '';
         showUser(user);
         newConversation();
-        await refreshConversations();
+        await Promise.all([refreshConversations(), refreshKnowledgeBases()]);
       } catch (error) {
         showUser(currentUser);
         $('auth-status').textContent = error.message;
@@ -153,17 +191,22 @@
         RagentAuth.clear();
         showUser(null);
         $('answer').textContent = $('conversation-id').value = '';
+        $('sources').replaceChildren();
+        $('chat-knowledge-base').replaceChildren(new Option('普通聊天', ''));
         $('history').textContent = '尚未选择会话';
         $('saved-conversations').replaceChildren(new Option('请选择，或新建会话', ''));
         $('chat-status').textContent = '已退出，请重新登录';
       } catch (error) { $('auth-status').textContent = error.message; }
     });
     $('new-conversation').addEventListener('click', newConversation);
-    $('refresh-conversations').addEventListener('click', () => refreshConversations().catch(error => $('chat-status').textContent = error.message));
+    $('chat-knowledge-base').addEventListener('change', newConversation);
+    $('refresh-conversations').addEventListener('click', () => Promise.all([refreshConversations(), refreshKnowledgeBases()]).catch(error => $('chat-status').textContent = error.message));
     $('load-history').addEventListener('click', () => loadHistory().catch(error => $('chat-status').textContent = error.message));
     $('saved-conversations').addEventListener('change', () => {
       if (!$('saved-conversations').value) return;
       $('conversation-id').value = $('saved-conversations').value;
+      $('chat-knowledge-base').value = $('saved-conversations').selectedOptions[0].dataset.knowledgeBaseId;
+      updateKnowledgeMode();
       $('answer').textContent = '';
       loadHistory().catch(error => $('chat-status').textContent = error.message);
     });
@@ -187,22 +230,26 @@
       event.preventDefault();
       if (!currentUser || busy) return;
       busy = true; showUser(currentUser); aborter = new AbortController();
-      $('answer').textContent = ''; $('chat-status').textContent = '正在连接…';
+      $('answer').textContent = ''; $('sources').replaceChildren(); $('chat-status').textContent = '正在连接…';
       const started = performance.now(); let reader; let completed = false; let terminal = false; let chunks = 0;
+      let answerBasis = '';
+      const basis = data => data.knowledgeBaseId == null ? '普通聊天 · 未使用知识库'
+        : '知识库问答 · 使用 ' + (data.sources || []).length + ' 个资料片段';
       try {
         const streaming = $('mode').value === 'stream';
         const response = await post(streaming ? '/api/chat/stream' : '/api/chat', JSON.stringify({
-          conversationId: $('conversation-id').value, question: $('question').value
+          conversationId: $('conversation-id').value, question: $('question').value,
+          knowledgeBaseId: $('chat-knowledge-base').value ? Number($('chat-knowledge-base').value) : null
         }), 'application/json', {signal: aborter.signal, headers: {'Accept': streaming ? 'text/event-stream' : 'application/json'}});
         if (!streaming || !response.ok) {
           const data = await jsonResponse(response);
-          $('answer').textContent = data.answer; completed = terminal = true;
+          $('answer').textContent = data.answer; showSources(data.sources); answerBasis = basis(data); completed = terminal = true;
         } else {
           if (!response.headers.get('content-type')?.includes('text/event-stream')) throw new Error('接口没有返回流式回答');
           const feed = createSseReader((name, data) => {
             if (name === 'start') $('chat-status').textContent = '等待模型返回…';
             if (name === 'delta') { chunks++; $('answer').textContent += data.content; $('chat-status').textContent = `接收中 · ${chunks} 个片段`; }
-            if (name === 'done') { completed = terminal = true; $('answer').textContent = data.answer; }
+            if (name === 'done') { completed = terminal = true; $('answer').textContent = data.answer; showSources(data.sources); answerBasis = basis(data); }
             if (name === 'error') { terminal = true; $('chat-status').textContent = `失败 · ${data.code}: ${data.message}`; }
           });
           reader = response.body.getReader(); const decoder = new TextDecoder('utf-8');
@@ -213,7 +260,7 @@
           }
         }
         if (completed) {
-          $('chat-status').textContent = `回答已完成并保存 · ${((performance.now() - started) / 1000).toFixed(2)} 秒`;
+          $('chat-status').textContent = `回答已完成并保存 · ${answerBasis} · ${((performance.now() - started) / 1000).toFixed(2)} 秒`;
           if (currentUser) await Promise.all([refreshConversations(), loadHistory()]);
         } else if (!terminal) $('chat-status').textContent = '连接已结束，保存结果尚未确认，请查看历史后再决定是否重试。';
       } catch (error) { $('chat-status').textContent = error.name === 'AbortError' ? '已停止接收，请查看历史确认保存情况。' : error.message; }
@@ -223,7 +270,7 @@
       try {
         const response = await RagentAuth.fetch('/api/auth/me');
         if (response.status === 401) { showUser(null); return; }
-        showUser(await jsonResponse(response)); newConversation(); await refreshConversations();
+        showUser(await jsonResponse(response)); newConversation(); await Promise.all([refreshConversations(), refreshKnowledgeBases()]);
       } catch (error) { showUser(null); $('auth-status').textContent = error.message; }
     })();
   </script>

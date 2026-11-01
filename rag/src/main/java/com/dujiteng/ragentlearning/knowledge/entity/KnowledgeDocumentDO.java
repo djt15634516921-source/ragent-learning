@@ -21,6 +21,12 @@ public class KnowledgeDocumentDO {
     private OffsetDateTime parsedAt;
     private OffsetDateTime parseStartedAt;
     private String parseToken;
+    private Long parseVersion;
+    private Long chunkVersion;
+    private Integer chunkSize;
+    private Integer chunkOverlap;
+    private Integer chunkCount;
+    private OffsetDateTime chunkedAt;
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public Long getKnowledgeBaseId() { return knowledgeBaseId; }
@@ -47,4 +53,46 @@ public class KnowledgeDocumentDO {
     public void setParseStartedAt(OffsetDateTime parseStartedAt) { this.parseStartedAt = parseStartedAt; }
     public String getParseToken() { return parseToken; }
     public void setParseToken(String parseToken) { this.parseToken = parseToken; }
+    public Long getParseVersion() { return parseVersion; }
+    public void setParseVersion(Long parseVersion) { this.parseVersion = parseVersion; }
+    public Long getChunkVersion() { return chunkVersion; }
+    public void setChunkVersion(Long chunkVersion) { this.chunkVersion = chunkVersion; }
+    public Integer getChunkSize() { return chunkSize; }
+    public void setChunkSize(Integer chunkSize) { this.chunkSize = chunkSize; }
+    public Integer getChunkOverlap() { return chunkOverlap; }
+    public void setChunkOverlap(Integer chunkOverlap) { this.chunkOverlap = chunkOverlap; }
+    public Integer getChunkCount() { return chunkCount; }
+    public void setChunkCount(Integer chunkCount) { this.chunkCount = chunkCount; }
+    public OffsetDateTime getChunkedAt() { return chunkedAt; }
+    public void setChunkedAt(OffsetDateTime chunkedAt) { this.chunkedAt = chunkedAt; }
+    private Long chunkRevision;
+    public Long getChunkRevision() { return chunkRevision; }
+    public void setChunkRevision(Long chunkRevision) { this.chunkRevision = chunkRevision; }
+    private String indexStatus;
+    public String getIndexStatus() { return indexStatus; }
+    public void setIndexStatus(String indexStatus) { this.indexStatus = indexStatus; }
+    private String indexError;
+    public String getIndexError() { return indexError; }
+    public void setIndexError(String indexError) { this.indexError = indexError; }
+    private OffsetDateTime indexStartedAt;
+    public OffsetDateTime getIndexStartedAt() { return indexStartedAt; }
+    public void setIndexStartedAt(OffsetDateTime indexStartedAt) { this.indexStartedAt = indexStartedAt; }
+    private String indexToken;
+    public String getIndexToken() { return indexToken; }
+    public void setIndexToken(String indexToken) { this.indexToken = indexToken; }
+    private Long indexedRevision;
+    public Long getIndexedRevision() { return indexedRevision; }
+    public void setIndexedRevision(Long indexedRevision) { this.indexedRevision = indexedRevision; }
+    private String indexModel;
+    public String getIndexModel() { return indexModel; }
+    public void setIndexModel(String indexModel) { this.indexModel = indexModel; }
+    private String indexProfile;
+    public String getIndexProfile() { return indexProfile; }
+    public void setIndexProfile(String indexProfile) { this.indexProfile = indexProfile; }
+    private Integer indexCount;
+    public Integer getIndexCount() { return indexCount; }
+    public void setIndexCount(Integer indexCount) { this.indexCount = indexCount; }
+    private OffsetDateTime indexedAt;
+    public OffsetDateTime getIndexedAt() { return indexedAt; }
+    public void setIndexedAt(OffsetDateTime indexedAt) { this.indexedAt = indexedAt; }
 }

@@ -10,6 +10,9 @@ import {resolve, join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {verifyBrowser} from './verify-browser.mjs';
+import {verifyChunks} from './verify-chunks.mjs';
+import {verifyRag} from './verify-rag.mjs';
+import {mockEmbedding} from './mock-embedding.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const runId = randomUUID().slice(0, 8);
@@ -111,24 +114,27 @@ try {
     try {
       let body = ''; for await (const chunk of request) body += chunk;
       const input = JSON.parse(body);
-      // 假模型只处理 Chat Completions 载荷，拒绝不含 messages 的请求。
+      if (request.url === '/embeddings') { await mockEmbedding(input, response); return; }
+      // 其余接口仍须是 Chat Completions 载荷。
       if (!Array.isArray(input.messages)) { response.writeHead(400).end(); return; }
       modelCalls.push(input);
       const question = input.messages.at(-1).content;
+      const rag = question.startsWith('知识库问答输入') ? JSON.parse(question.slice(question.indexOf('\n') + 1)) : null;
+      const answer = rag ? '知识库测试回答：' + rag.sources[0].content.slice(0, 500) + ' [1]' : '测试回答：' + question;
       if (question === 'model-error') { response.writeHead(503).end('mock unavailable'); return; }
       if (!input.stream) {
         if (question === 'slow-first') await delay(250);
         response.writeHead(200, {'Content-Type': 'application/json'});
-        response.end(JSON.stringify({choices: [{message: {content: '测试回答：' + question}}]})); return;
+        response.end(JSON.stringify({choices: [{message: {content: answer}}]})); return;
       }
       response.writeHead(200, {'Content-Type': 'text/event-stream'});
       const chunk = content => response.write('data: ' + JSON.stringify({choices: [{delta: {content}}]}) + '\n\n');
-      chunk('测试');
+      chunk(rag ? '知识库' : '测试');
       if (question === 'cancel-stream' || question === 'timeout-stream') {
         for (let i=0; i<40 && !response.destroyed; i++) { await delay(50); if (!response.destroyed) chunk('片段'); }
         if (response.destroyed) return;
       }
-      chunk('回答：' + question);
+      chunk(rag ? answer.slice(3) : '回答：' + question);
       if (question !== 'incomplete-stream') {
         response.write('data: ' + JSON.stringify({choices: [{delta: {}, finish_reason: 'stop'}]}) + '\n\n');
         response.write('data: [DONE]\n\n');
@@ -155,6 +161,7 @@ try {
     REDIS_HOST: '127.0.0.1', REDIS_PORT: redisPort, REDIS_PASSWORD: password, REDIS_DATABASE: '0',
     AUTH_REDIS_PREFIX: redisPrefix,
     CHAT_STREAM_TIMEOUT_MS: '1500',
+    EMBEDDING_URL: `http://127.0.0.1:${modelPort}/embeddings`, EMBEDDING_API_KEY: 'local-test',
     LLM_CHAT_URL: `http://127.0.0.1:${modelPort}/chat`, LLM_MODEL: 'local-test', LLM_API_KEY: 'local-test'};
   async function startApplication(logName) {
     const log = openSync(join(work, logName), 'w');
@@ -204,6 +211,9 @@ try {
   const page = await a.request('/knowledge-test.html');
   assert.equal(page.status, 200);
   assert.match(await page.text(), /知识库与文档/);
+  for (const path of ['/login-test.html', '/knowledge-test.html', '/stream-test.html', '/auth.js']) {
+    assert.equal((await a.request(path)).headers.get('cache-control'), 'no-store', path + ' 防止旧页面沿用旧协议');
+  }
   passed('未登录 API 被拦截，测试页可打开');
   await a.register('study_a');
   assert.equal((await a.json('/api/auth/register', {username: 'STUDY_A', password: 'local-test-123'})).status, 409);
@@ -430,6 +440,8 @@ try {
   assert.equal((await parse(document.id)).status, 200);
   assert.equal((await text(document.id)).errorMessage, null);
   passed('写入解析结果失败不误报成功，解除故障后重试恢复');
+  const chunkResult = await verifyChunks({a, b, anonymous, kb, secondKb, sql, container, storage, until, passed});
+  const ragResult = await verifyRag({a, b, anonymous, kb, secondKb, sql, modelCalls, until, passed});
   await stopApplication();
   await startApplication('restart.log');
   assert.equal((await a.request('/api/auth/me')).status, 200);
@@ -437,6 +449,13 @@ try {
   assert.equal(await (await a.request(filePath)).text(), content);
   assert.equal((await text(document.id)).text, content);
   passed('Java 重启后 Redis 登录恢复，知识库、解析文本和原文件仍存在');
+  const restoredChunks = await (await a.request(`/api/knowledge-bases/${kb.id}/documents/${chunkResult.documentId}/chunks`)).json();
+  assert.equal(restoredChunks.chunkStatus, 'SUCCESS');
+  assert.equal(restoredChunks.total, chunkResult.expectedTotal);
+  passed('Java 重启后片段、来源版本、顺序与统计保留');
+  assert.equal((await (await a.request(ragResult.path + '/index')).json()).status, 'SUCCESS');
+  assert.deepEqual((await (await a.request('/api/conversations/' + ragResult.conversationId + '/messages')).json())[1].sources, ragResult.sources);
+  passed('RAG：重启后向量索引、知识库绑定与历史回答的来源快照保留');
   assert.equal((await a.post('/api/auth/logout', '', 'application/x-www-form-urlencoded')).status, 200);
   assert.equal((await a.request('/api/knowledge-bases')).status, 401);
   assert.equal((await a.request(filePath)).status, 401);

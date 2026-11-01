@@ -17,4 +17,7 @@ public class ChatConversationDO {
     public void setUserId(Long userId) { this.userId = userId; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+    private Long knowledgeBaseId;
+    public Long getKnowledgeBaseId() { return knowledgeBaseId; }
+    public void setKnowledgeBaseId(Long knowledgeBaseId) { this.knowledgeBaseId = knowledgeBaseId; }
 }

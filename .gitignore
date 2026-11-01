@@ -6,3 +6,6 @@ target/
 data/
 http-client.private.env.json
 bootstrap/src/main/resources/application-local.yaml
+
+# Local Spring Boot connection overrides; contains private credentials.
+/config/application.properties

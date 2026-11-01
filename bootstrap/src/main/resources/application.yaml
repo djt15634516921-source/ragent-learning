@@ -62,3 +62,12 @@ mybatis-plus:
     map-underscore-to-camel-case: true
   global-config:
     banner: false
+
+embedding:
+  url: ${EMBEDDING_URL:}
+  model: ${EMBEDDING_MODEL:text-embedding-v4}
+  api-key: ${EMBEDDING_API_KEY:${LLM_API_KEY:}}
+rag:
+  top-k: ${RAG_TOP_K:4}
+  min-score: ${RAG_MIN_SCORE:0.35}
+  max-index-chunks: ${RAG_MAX_INDEX_CHUNKS:500}

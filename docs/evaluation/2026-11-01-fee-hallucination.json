@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-01",
+  "status": "FAILED_MANUAL_OBSERVATION",
+  "source": "用户截图与数据库保存的回答、来源快照只读核对",
+  "caseId": "Q10",
+  "conversationId": "chat-D1401",
+  "priorUserTurns": 8,
+  "actualQuestion": "月泉系统每提交一张工单要收多少钱？",
+  "actualAnswer": "【Ragent学习助手】  \n月泉系统每提交一张工单需支付 50 元[1]。",
+  "expectedBehavior": "明确说明本次资料未提供收费信息，不能编造金额或擅自断言免费",
+  "answerCorrect": false,
+  "refusalCorrect": false,
+  "citationSupported": false,
+  "citedSource": "02-月泉工单规则.md",
+  "citedSourceScore": 0.6862204892898238,
+  "sourceFindings": "本次四份来源均没有收费信息；被引用工单规则仅包含编号、首次回复时限和超时联系规则",
+  "priorAssistantContains50Yuan": false,
+  "newModelCallsDuringInspection": 0,
+  "conclusion": "来源主题相关但不含所需费用事实，模型无依据生成金额并错误引用。不能通过提高相似度阈值证明费用有依据，也不能仅归因于旧历史中的金额。",
+  "independentTenCaseBaselineCompleted": false
+}
