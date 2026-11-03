@@ -19,4 +19,18 @@ Content-Type: application/json
 Accept: text/event-stream
 
 {"conversationId":"http-chat-study","question":"再给一个具体例子。"}
-$
+
+### D15：先把 knowledgeBaseId 替换为自己的已向量化知识库编号；同一会话固定该库。
+POST http://localhost:18081/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"conversationId":"http-rewrite-study","knowledgeBaseId":3,"question":"谁负责星河学习项目的验收？"}
+
+### 连续追问：检查 retrievalQuery.searchQuestion 是否补全对象；不要换会话编号。
+POST http://localhost:18081/api/chat/stream
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Accept: text/event-stream
+
+{"conversationId":"http-rewrite-study","knowledgeBaseId":3,"question":"它每周什么时候验收？"}

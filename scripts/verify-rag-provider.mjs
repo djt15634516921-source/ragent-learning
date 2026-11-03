@@ -1,6 +1,7 @@
 // 可选真实服务验收：仅使用合成资料和独立容器，调用一次文档 Embedding、一次问题 Embedding、一次聊天。
 // 会产生提供方费用；先执行 verify-knowledge.mjs，通过后按需手动运行。
-// --evidence-check 使用五份 D14 合成资料，5 次文档 Embedding、4 次问题 Embedding、4 次聊天（其中一次 SSE）。
+// --evidence-check 使用五份 D14 合成资料，5 次文档 Embedding、4 次问题 Embedding、4 次回答生成（其中一次 SSE）。
+// D15启用改写后，连续提问另有最多3次改写调用；如需澄清可能提前结束。旧版13次请求记录不代表现在的调用上限。
 import assert from 'node:assert/strict';
 import {execFileSync, spawn} from 'node:child_process';
 import {createServer} from 'node:net';

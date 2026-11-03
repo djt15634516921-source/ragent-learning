@@ -13,7 +13,7 @@
 
 先用 [rag-demo.md](examples/rag-demo.md) 提问：“星河学习项目的验收口令是什么？”这份合成资料中才有答案，适合区分知识检索与模型凭自身知识回答。
 
-向量化会调用外部服务。相同文档版本、切分参数和模型空间重复点击会复用已成功的向量。每次检索仍需要一次问题 Embedding；有命中时再调用聊天模型。不要用很长的文档反复试错，默认单文档上限 500 块。
+向量化会调用外部服务。相同文档版本、切分参数和模型空间重复点击会复用已成功的向量。每次检索仍需要一次问题Embedding；有命中时再调用聊天模型。D15起知识库连续提问默认额外做一次短超时问题改写，首轮/普通聊天不增加这次调用；歧义澄清跳过检索和生成，见 [D15](16-query-rewrite.md)。不要用很长的文档反复试错，默认单文档上限500块。
 
 ### 普通聊天和知识库模式容易混淆的地方
 
@@ -29,7 +29,8 @@
 flowchart TD
     A[已切分片段] --> B[EmbeddingClient 文档向量化]
     B --> C[knowledge_chunk_vector]
-    Q[用户问题与 knowledgeBaseId] --> E[EmbeddingClient 问题向量化]
+    Q[用户问题与 knowledgeBaseId] --> R[知识库连续追问按近期用户问题补全对象]
+    R --> E[EmbeddingClient 检索问题向量化]
     E --> F[pgvector 过滤归属和版本后比较相似度]
     C --> F
     F --> G[问题和相关片段交给聊天模型]
@@ -46,14 +47,14 @@ flowchart TD
 | 文本解析 | `KnowledgeController.parse → DocumentParsingServiceImpl.parse → KnowledgeRepository.startParsing → FileStorage/DocumentParser → KnowledgeRepository.finishParsing`：占用解析任务、事务外读文件提取正文、以 token 条件保存结果 |
 | 向量化 | `KnowledgeRetrievalController.index → DocumentIndexServiceImpl.index → DocumentVectorRepository.begin → EmbeddingClient.embed → DocumentVectorRepository.finish`：先认领片段快照，远程分批计算，最后短事务发布全部向量 |
 | 检索 | `KnowledgeRetrievalServiceImpl.search → KnowledgeRepository.requireOwner → KnowledgeVectorMapper.countReady → EmbeddingClient.embed → KnowledgeVectorMapper.search`：先确认归属和可用索引，再向量化问题，数据库按余弦距离检索 |
-| 完整回答 | `ChatController.chat → ChatServiceImpl.chat → prepare → retrieval.search → ModelClient.chat → Conversation.appendTurn → ChatMemoryRepository.appendTurn → MessageMapper.insertOwned` |
+| 完整回答 | `ChatController.chat → ChatServiceImpl.chat → prepare → RagWorkflow.prepare（改写/检索）→ RAGPromptService.build → LLMService.chat → Conversation.appendTurn → ChatMemoryRepository.appendTurn → MessageMapper.insertOwned` |
 | 流式回答 | `ChatController.stream` 在请求线程验证身份和归属，将 userId/knowledgeBaseId 传给 worker；`ChatServiceImpl.streamChat` 完成检索、模型输出和保存，保存成功后 `done` 才返回 answer、sources、knowledgeBaseId |
 
 自定义基础提示词和 `ModelClient` 保留。知识库模式只追加固定的资料使用规则；检索原文放在当前 **user 消息的 JSON 数据**中，避免把文档内容提升成 system 指令。资料不足时明确说明；没有过阈值片段时由后端直接拒答，不调用聊天模型。
 
 模型看到检索包装后的问题，但数据库保存原始问题。`chat_message.sources_json` 保存该次回答的来源快照，因此后续文档重新解析或切分，不会把旧回答的来源偷偷替换成新版本。
 
-D14 发现收费幻觉与错引后，模型输入进一步收敛为显式 `citationId`、文件名和正文。普通聊天仍发送原来的近期完整历史；知识库生成请求保留近期用户问题，将旧助手正文替换为占位消息，避免把过去的幻觉和旧引用继续当作本轮证据。数据库和页面仍显示完整的原始历史。复杂追问的改写能力仍待实现，不能将这里的上下文隔离说成已完成问题改写或通用事实核验。实际失败和修正验证见 [D14 评估记录](14-rag-evaluation.md)。
+D14发现收费幻觉与错引后，模型输入进一步收敛为显式citationId、文件名和正文。普通聊天发送原来的近期完整历史；知识库生成请求保留近期用户问题，将旧助手正文替换为占位消息，避免把过去的幻觉和旧引用当作本轮证据。数据库和页面仍显示完整历史。D15新增仅依据近期用户提问补全主体的检索改写；多问拆分和依赖助手答案中实体的指代仍未支持，也不代表通用事实核验。实际失败和修正验证见 [D14评估记录](14-rag-evaluation.md)。
 
 ## 包与依赖
 

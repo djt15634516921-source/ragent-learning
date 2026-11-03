@@ -13,6 +13,8 @@ import {verifyBrowser} from './verify-browser.mjs';
 import {verifyChunks} from './verify-chunks.mjs';
 import {verifyRag} from './verify-rag.mjs';
 import {mockEmbedding} from './mock-embedding.mjs';
+import {mockRewrite} from './mock-rewrite.mjs';
+import {verifyRewrite} from './verify-rewrite.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const runId = randomUUID().slice(0, 8);
@@ -117,6 +119,7 @@ try {
       if (request.url === '/embeddings') { await mockEmbedding(input, response); return; }
       // 其余接口仍须是 Chat Completions 载荷。
       if (!Array.isArray(input.messages)) { response.writeHead(400).end(); return; }
+      if (await mockRewrite(input, response)) return;
       modelCalls.push(input);
       const question = input.messages.at(-1).content;
       const rag = question.startsWith('知识库问答输入') ? JSON.parse(question.slice(question.indexOf('\n') + 1)) : null;
@@ -161,6 +164,7 @@ try {
     REDIS_HOST: '127.0.0.1', REDIS_PORT: redisPort, REDIS_PASSWORD: password, REDIS_DATABASE: '0',
     AUTH_REDIS_PREFIX: redisPrefix,
     CHAT_STREAM_TIMEOUT_MS: '1500',
+    RAG_REWRITE_ENABLED: 'true', RAG_REWRITE_TIMEOUT_MS: '400',
     EMBEDDING_URL: `http://127.0.0.1:${modelPort}/embeddings`, EMBEDDING_API_KEY: 'local-test',
     LLM_CHAT_URL: `http://127.0.0.1:${modelPort}/chat`, LLM_MODEL: 'local-test', LLM_API_KEY: 'local-test'};
   async function startApplication(logName) {
@@ -442,6 +446,7 @@ try {
   passed('写入解析结果失败不误报成功，解除故障后重试恢复');
   const chunkResult = await verifyChunks({a, b, anonymous, kb, secondKb, sql, container, storage, until, passed});
   const ragResult = await verifyRag({a, b, anonymous, kb, secondKb, sql, modelCalls, until, passed});
+  const rewriteResult = await verifyRewrite({a, b, kb, secondKb, sql, modelCalls, passed});
   await stopApplication();
   await startApplication('restart.log');
   assert.equal((await a.request('/api/auth/me')).status, 200);
@@ -456,6 +461,11 @@ try {
   assert.equal((await (await a.request(ragResult.path + '/index')).json()).status, 'SUCCESS');
   assert.deepEqual((await (await a.request('/api/conversations/' + ragResult.conversationId + '/messages')).json())[1].sources, ragResult.sources);
   passed('RAG：重启后向量索引、知识库绑定与历史回答的来源快照保留');
+  const resumed = await a.json('/api/chat', {conversationId: rewriteResult.cid, knowledgeBaseId: rewriteResult.knowledgeBaseId,
+    question: rewriteResult.original});
+  assert.equal(resumed.status, 200);
+  assert.equal((await resumed.json()).retrievalQuery.searchQuestion, '星河学习项目每周什么时候验收？');
+  passed('改写：Java 重启后从数据库恢复近期用户问题，连续追问仍能补全对象');
   assert.equal((await a.post('/api/auth/logout', '', 'application/x-www-form-urlencoded')).status, 200);
   assert.equal((await a.request('/api/knowledge-bases')).status, 401);
   assert.equal((await a.request(filePath)).status, 401);

@@ -2,6 +2,8 @@
 
 现有工程已实现普通/流式聊天、多轮历史与 PostgreSQL 持久化、注册登录与用户隔离、知识库管理、文档上传下载、TXT/Markdown/PDF/DOCX 文本解析，带来源和重叠的文档切分，以及基于 Embedding + pgvector 的知识库问答（普通/流式回答及来源）。当前统一为 **MyBatis-Plus + Sa-Token + Redis**，采用 framework、infra-ai、system、rag、bootstrap 五个 Maven 模块。
 
+2026-11-02 学习重点已按用户提供的简历教程调整为原项目核心能力的实现、理解与验证。基础 RAG 是当前起点；Agent、Skills、人工确认、分层记忆、混合检索和效果评测的差距与推进顺序见 [核心学习路线](docs/15-core-learning-roadmap.md)，这些计划项尚不能作为已实现能力。
+
 学习工程：`D:\jastudy\idea\ragent-learning`。参考工程：`D:\jastudy\idea\ragent`。
 
 ## 本机启动
@@ -28,6 +30,7 @@
 | LLM_CHAT_URL / LLM_MODEL / LLM_API_KEY | 沿用现有可用模型配置，参数不变 |
 | EMBEDDING_URL / MODEL / API_KEY | 地址默认从聊天地址派生；模型 text-embedding-v4、1024 维；密钥默认复用 LLM_API_KEY |
 | RAG_TOP_K / RAG_MIN_SCORE / RAG_MAX_INDEX_CHUNKS | 默认 4 / 0.35 / 500，控制召回与单文档向量化规模 |
+| RAG_REWRITE_ENABLED / RAG_REWRITE_TIMEOUT_MS | 默认 true / 3000；知识库连续提问额外调用一次现有模型补全检索问题，失败/超时明确标记回退 |
 
 ## 当前认证协议
 
@@ -41,6 +44,9 @@
 
 ## 代码与学习说明
 
+- [当前学习重点：教程亮点对照、阶段验收与下一步](docs/15-core-learning-roadmap.md)。
+- [当前架构：RAG核心、统一模型入口与重排扩展位置](docs/17-rag-architecture-alignment.md)。
+- [当前 D15：连续追问改写、输入输出与验收](docs/16-query-rewrite.md)。
 - [当前 D11：知识库检索问答与实际调用链](docs/13-knowledge-rag.md)。
 - [D14：固定十题评估、资料与排错记录](docs/14-rag-evaluation.md)：先记录当前结果，再验证后续检索改动。
 - [D10：文档切分、来源与页面验收](docs/12-document-chunking.md)。
@@ -73,7 +79,7 @@ $env:RUN_BROWSER_CHECK = 'true'
 node scripts/verify-knowledge.mjs
 ```
 
-报告与日志在 `target/knowledge-test-<随机编号>/`。Maven verify 负责构建，业务回归由 Node 脚本执行。最新结果包含 9 个算法单元测试、集成/浏览器检查和真实百炼最小 RAG 闭环；准确数量与未验证项见 [D11 验收记录](docs/13-knowledge-rag-verification.md)，不能把编译通过等同于全部功能通过。
+报告与日志在 `target/knowledge-test-<随机编号>/`。Maven verify负责构建，业务回归由Node脚本执行。最新架构对齐通过19个单元测试及58组集成/Edge检查，见 [架构验收记录](docs/17-rag-architecture-alignment.md)。D15用户曾完成一条真实模型连续追问观察，见 [D15验收记录](docs/16-query-rewrite.md)；本次架构版本未追加真实付费调用，系统性真实效果评测仍待完成。此前真实百炼最小RAG历史结果见 [D11验收记录](docs/13-knowledge-rag-verification.md)，不能把编译或假模型通过等同于真实模型效果通过。
 
 ## 本机 Redis 登录错误排查
 

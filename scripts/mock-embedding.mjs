@@ -11,7 +11,9 @@ export async function mockEmbedding(input, response) {
   }
   const data = input.input.map((text, index) => {
     const vector = Array(bad ? 2 : 1024).fill(0);
-    vector[text.includes('火星') ? 1 : 0] = 1;
+    const subject = text.includes('火星') ? 1 : text.includes('青禾') ? 2
+      : text.includes('它每周') && !text.includes('星河') ? 3 : 0;
+    vector[subject] = 1;
     return {index, embedding: vector};
   }).reverse(); // 服务允许乱序，用 index 恢复原片段对应关系。
   response.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify({data}));

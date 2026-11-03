@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-02",
+  "kind": "user_manual_real_provider_observation",
+  "verification": "用户截图与只读数据库核对；助手未额外触发模型请求",
+  "conversationId": "chat-D1401",
+  "knowledgeBaseId": 3,
+  "previousUserQuestion": "“谁负责星河学习项目的验收",
+  "originalQuestion": "“它每周什么时候验收？”",
+  "searchQuestionFromScreenshot": "星河学习项目每周什么时候验收",
+  "pageStatus": "已补全追问对象",
+  "answerFact": "星河学习项目的验收时间为每周四下午三点[1]。",
+  "supportingSource": {
+    "citationId": 1,
+    "documentId": 4,
+    "chunkId": 14,
+    "filename": "01-星河项目验收.md",
+    "score": 0.7796319258432446,
+    "quote": "星河学习项目的验收时间为每周四下午三点。"
+  },
+  "checks": {
+    "resolvedSubjectDisplayed": true,
+    "answerFactSupported": true,
+    "citationMatchesSource": true,
+    "originalQuestionPreservedInDatabase": true
+  },
+  "notes": [
+    "沿用已有会话；近期用户问题包括星河验收和月泉工单，其中已有星河验收时间的完整问法，不能计为全新独立基线。",
+    "改写元数据仅在响应中；searchQuestion来自截图，不宣称从数据库读取。",
+    "回答额外给出2024年6月20日的假设例子；该日期不在来源正文中，不应作为知识库事实或本次真实日期。",
+    "此记录仅支持这一条真实模型连续追问样例成功，不代表全部指代或歧义场景通过。"
+  ]
+}
