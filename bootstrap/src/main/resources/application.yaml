@@ -24,7 +24,7 @@ spring:
   sql:
     init:
       mode: always
-      schema-locations: classpath:db/chat-schema.sql
+      schema-locations: classpath:db/chat-schema.sql,classpath:db/migration/V18__knowledge_lifecycle.sql
 
 server:
   port: ${SERVER_PORT:18081}
@@ -72,5 +72,25 @@ rag:
     enabled: ${RAG_REWRITE_ENABLED:true}
     timeout-ms: ${RAG_REWRITE_TIMEOUT_MS:3000}
   top-k: ${RAG_TOP_K:4}
+  recall-budget: ${RAG_RECALL_BUDGET:16}
+  rerank-candidate-limit: ${RAG_RERANK_CANDIDATE_LIMIT:12}
+  rerank:
+    enabled: ${RAG_RERANK_ENABLED:false}
+    max-input-chars: ${RAG_RERANK_MAX_INPUT_CHARS:24000}
   min-score: ${RAG_MIN_SCORE:0.35}
   max-index-chunks: ${RAG_MAX_INDEX_CHUNKS:500}
+  max-context-chars: ${RAG_MAX_CONTEXT_CHARS:6000}
+
+rerank:
+  url: ${RERANK_URL:}
+  model: ${RERANK_MODEL:qwen3-rerank}
+  api-key: ${RERANK_API_KEY:${LLM_API_KEY:}}
+  timeout-ms: ${RERANK_TIMEOUT_MS:3000}
+
+knowledge:
+  chunk-size: ${KNOWLEDGE_CHUNK_SIZE:800}
+  chunk-overlap: ${KNOWLEDGE_CHUNK_OVERLAP:120}
+  ingestion-workers: ${KNOWLEDGE_INGESTION_WORKERS:2}
+  ingestion-poll-ms: ${KNOWLEDGE_INGESTION_POLL_MS:1000}
+  ingestion-lease-ms: ${KNOWLEDGE_INGESTION_LEASE_MS:15000}
+  cleanup-poll-ms: ${KNOWLEDGE_CLEANUP_POLL_MS:30000}

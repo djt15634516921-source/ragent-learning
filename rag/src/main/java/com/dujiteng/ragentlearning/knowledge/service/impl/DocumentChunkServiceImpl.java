@@ -1,6 +1,8 @@
 package com.dujiteng.ragentlearning.knowledge.service.impl;
 
 import com.dujiteng.ragentlearning.common.ChatApiException;
+import com.dujiteng.ragentlearning.knowledge.processing.DocumentProcessingCoordinator;
+import com.dujiteng.ragentlearning.knowledge.config.KnowledgeProcessingSettings;
 import com.dujiteng.ragentlearning.knowledge.chunk.TextSplitter;
 import com.dujiteng.ragentlearning.knowledge.dto.ChunkRequest;
 import com.dujiteng.ragentlearning.knowledge.repository.DocumentChunkRepository;
@@ -12,21 +14,29 @@ import org.springframework.transaction.TransactionException;
 
 @Service
 public class DocumentChunkServiceImpl implements DocumentChunkService {
+    private final DocumentProcessingCoordinator coordinator;
     private final DocumentChunkRepository repository;
     private final TextSplitter splitter;
+    private final KnowledgeProcessingSettings settings;
 
-    public DocumentChunkServiceImpl(DocumentChunkRepository repository, TextSplitter splitter) {
+    public DocumentChunkServiceImpl(DocumentChunkRepository repository, TextSplitter splitter, DocumentProcessingCoordinator coordinator, KnowledgeProcessingSettings settings) {
+        this.coordinator = coordinator;
         this.repository = repository;
         this.splitter = splitter;
+        this.settings = settings;
     }
 
     @Override
     public DocumentChunksVO chunk(long userId, long knowledgeBaseId, long documentId, ChunkRequest request) {
+        return coordinator.manual(userId, knowledgeBaseId, documentId, () -> chunkDocument(userId, knowledgeBaseId, documentId, request));
+    }
+
+    private DocumentChunksVO chunkDocument(long userId, long knowledgeBaseId, long documentId, ChunkRequest request) {
         try {
             // 先检查归属；切分计算在写入事务之外，写入前再次校验原文版本。
             var source = repository.source(userId, knowledgeBaseId, documentId);
-            int chunkSize = request == null || request.chunkSize() == null ? 800 : request.chunkSize();
-            int overlap = request == null || request.overlap() == null ? 120 : request.overlap();
+            int chunkSize = request == null || request.chunkSize() == null ? settings.chunkSize() : request.chunkSize();
+            int overlap = request == null || request.overlap() == null ? settings.overlap() : request.overlap();
             TextSplitter.validate(chunkSize, overlap);
             var segments = splitter.split(source.getParsedText(), chunkSize, overlap);
             if (segments.isEmpty()) throw new ChatApiException(422, "DOCUMENT_TEXT_EMPTY", "没有可切分的正文，请重新解析");

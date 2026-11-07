@@ -41,8 +41,8 @@ public class ChatExceptionHandler {
         return ResponseEntity.status(503).body(new ChatError("AUTH_SESSION_UNAVAILABLE", "登录会话存储暂时不可用，请检查 Redis"));
     }
 
-    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
-    public ResponseEntity<ChatError> handleDatabase(org.springframework.dao.DataAccessException error) {
+    @ExceptionHandler({org.springframework.dao.DataAccessException.class, org.springframework.transaction.TransactionException.class})
+    public ResponseEntity<ChatError> handleDatabase(RuntimeException error) {
         // Lettuce 读超时转换为通用 QueryTimeoutException，按 cause 区分会话存储与业务数据库。
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
             if (cause.getClass().getName().startsWith("io.lettuce.")) return handleSessionUnavailable(error);

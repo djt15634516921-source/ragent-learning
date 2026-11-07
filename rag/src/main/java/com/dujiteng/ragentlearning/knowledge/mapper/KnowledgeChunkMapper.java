@@ -28,7 +28,7 @@ public interface KnowledgeChunkMapper extends BaseMapper<KnowledgeChunkDO> {
         SELECT c.* FROM knowledge_chunk c
         JOIN knowledge_document d ON d.id = c.document_id
         JOIN knowledge_base k ON k.id = d.knowledge_base_id
-        WHERE d.id = #{documentId} AND k.id = #{knowledgeBaseId} AND k.user_id = #{userId}
+        WHERE d.id = #{documentId} AND k.id = #{knowledgeBaseId} AND k.user_id = #{userId} AND k.deleted_at IS NULL
           AND d.status = 'SUCCESS' AND c.source_version = d.parse_version
           AND d.chunk_version = d.parse_version
         ORDER BY c.chunk_index

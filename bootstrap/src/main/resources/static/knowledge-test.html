@@ -12,6 +12,10 @@
     label { display: block; margin: 12px 0 6px; font-weight: 600; }
     input,textarea,select,button { font: inherit; }
     input,textarea,select { width: 100%; padding: 10px; border: 1px solid #bdc8d8; border-radius: 6px; }
+    input[type=checkbox] { width: auto; }
+    .comparison { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 18px; }
+    .rank-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    .rank-table th,.rank-table td { border-bottom: 1px solid #dde3ec; padding: 6px; text-align: left; overflow-wrap: anywhere; }
     button { margin: 12px 8px 0 0; padding: 9px 17px; border: 0; border-radius: 6px; cursor: pointer; color: white; background: #285edb; }
     button.secondary { background: #e9eef8; color: #243047; }
     button:disabled { opacity: .5; cursor: default; }
@@ -40,18 +44,26 @@
       <label for="knowledge-base">我的知识库</label>
       <select id="knowledge-base"><option value="">正在加载…</option></select>
       <button id="refresh" class="secondary" type="button">刷新列表</button>
+      <button id="delete-base" class="secondary" type="button">删除当前知识库</button>
       <form id="upload-form">
         <label for="file">选择文件</label>
         <input id="file" type="file" required accept=".txt,.md,.pdf,.docx">
         <p class="hint">支持 TXT、Markdown、文本型 PDF、DOCX，每个文件不超过 10 MB。上传后点击“解析文本”。</p>
         <button type="submit">上传到当前知识库</button>
       </form>
+      <button id="upload-ingest" type="button">上传并自动入库</button>
+      <p class="hint">自动入库会在后台完成解析、切分和向量化，使用下方切分参数。向量化会调用模型服务；失败后可以重试。</p>
     </section>
     <section>
       <h2>当前知识库的文档</h2>
       <p class="hint">解析 → 切分 → 向量化，完成后可返回聊天页选择这个知识库提问。向量化会调用模型服务；相同片段和模型重复点击会复用结果。</p>
       <p id="empty">请选择知识库。</p>
       <ul id="documents"></ul>
+    </section>
+    <section>
+      <h2>入库进度</h2>
+      <p class="hint">待处理 → 解析中 → 切块中 → 向量化中 → 完成。刷新页面仍可查看任务；服务中断的执行会标记失败，等待你重试。</p>
+      <ul id="ingestion-tasks"></ul>
     </section>
     <section>
       <h2>解析文本</h2>
@@ -70,6 +82,21 @@
       <button id="chunk-prev" type="button" class="secondary" disabled>上一页</button>
       <button id="chunk-next" type="button" class="secondary" disabled>下一页</button>
     </section>
+    <section>
+      <h2>检索调试</h2>
+      <p class="hint" id="search-settings">这里只查看检索资料，不生成回答。调整参数仅影响本次调试；聊天使用服务端默认设置。</p>
+      <label for="search-question">检索问题</label><textarea id="search-question" rows="2" maxlength="8000"></textarea>
+      <label for="search-top-k">最多返回片段数（Top-K）</label><input id="search-top-k" type="number" min="1" max="20" value="4">
+      <label for="search-min-score">最低相似度</label><input id="search-min-score" type="number" min="-1" max="1" step="0.01" value="0.35">
+      <label for="search-recall-budget">最多召回片段数</label><input id="search-recall-budget" type="number" min="1" max="100" value="16">
+      <label for="search-candidate-limit">最多送入重排的候选数</label><input id="search-candidate-limit" type="number" min="1" max="100" value="12">
+      <label><input id="search-rerank" type="checkbox"> 本次检索启用重排（会调用重排模型）</label>
+      <button id="search-run" type="button">检索资料</button>
+      <button id="search-compare" type="button" class="secondary">对比重排前后</button>
+      <p class="hint">对比共享同一次召回和候选集，调用一次重排，不生成回答。向量分与重排分分别显示。</p>
+      <p id="search-status" role="status"></p><div id="search-trace"></div><div id="search-results"></div>
+      <div id="search-comparison" class="comparison"></div>
+    </section>
   </fieldset>
   <p id="status" role="status" aria-live="polite"></p>
   <script src="/auth.js"></script>
@@ -77,6 +104,8 @@
     const $ = id => document.getElementById(id);
     let busy = false;
     let chunkSelection = null;
+    let latestTasks = [];
+    let taskFingerprint = '';
     async function read(response) {
       const data = await response.json();
       if (!response.ok) {
@@ -113,11 +142,16 @@
       $('documents').replaceChildren();
       const id = $('knowledge-base').value;
       $('empty').textContent = id ? '正在加载文档…' : '先创建或选择一个知识库。';
-      if (!id) return;
-      const rows = await get(`/api/knowledge-bases/${id}/documents`);
+      if (!id) { latestTasks = []; renderTasks(); return; }
+      const [rows, tasks] = await Promise.all([get(`/api/knowledge-bases/${id}/documents`), get(`/api/knowledge-bases/${id}/ingestion-tasks`)]);
+      if (id !== $('knowledge-base').value) return;
+      latestTasks = tasks; taskFingerprint = JSON.stringify(tasks); renderTasks();
       $('empty').textContent = rows.length ? '' : '这个知识库还没有文档。';
       for (const row of rows) {
         const item = document.createElement('li');
+        item.dataset.documentId = row.id;
+        const task = tasks.find(task => task.documentId === row.id);
+        const processing = task && ['PENDING', 'RUNNING'].includes(task.status);
         const link = document.createElement('a');
         link.textContent = row.filename;
         link.href = `/api/knowledge-bases/${id}/documents/${row.id}/file`;
@@ -153,6 +187,7 @@
         parse.type = 'button';
         parse.className = 'secondary';
         parse.textContent = row.status === 'SUCCESS' ? '重新解析' : row.status === 'FAILED' ? '重试解析' : '解析文本';
+        parse.disabled = !!processing;
         parse.addEventListener('click', () => run(async () => {
           clearChunks('原文解析后，请重新切分以查看最新片段。');
           $('text-summary').textContent = `正在解析：${row.filename}`;
@@ -179,7 +214,7 @@
         const split = document.createElement('button');
         split.type = 'button'; split.className = 'secondary';
         split.textContent = row.chunkStatus === 'SUCCESS' ? '重新切分' : '切分文本';
-        split.disabled = row.status !== 'SUCCESS';
+        split.disabled = row.status !== 'SUCCESS' || !!processing;
         split.addEventListener('click', () => run(async () => {
           if (!$('chunk-size').reportValidity() || !$('chunk-overlap').reportValidity()) return;
           await post(
@@ -197,7 +232,7 @@
         const index = document.createElement('button');
         index.type = 'button'; index.className = 'secondary';
         index.textContent = row.indexStatus === 'FAILED' ? '重试向量化' : '向量化';
-        index.disabled = row.chunkStatus !== 'SUCCESS' || row.indexStatus === 'RUNNING';
+        index.disabled = row.chunkStatus !== 'SUCCESS' || row.indexStatus === 'RUNNING' || !!processing;
         index.addEventListener('click', () => run(async () => {
           $('status').textContent = '正在向量化，将分批调用 Embedding 服务，请稍候…';
           try {
@@ -205,9 +240,72 @@
             $('status').textContent = '“' + row.filename + '”向量化完成 · ' + result.count + ' 块，可返回聊天页提问';
           } finally { await documents(); }
         }));
-        item.append(parse, preview, split, chunks, index);
+        const ingest = document.createElement('button');
+        ingest.type = 'button'; ingest.textContent = '一键入库'; ingest.disabled = !!processing;
+        ingest.addEventListener('click', () => run(async () => {
+          const result = await post(`/api/knowledge-bases/${id}/documents/${row.id}/ingest`, JSON.stringify(chunkOptions()), true);
+          await documents(); $('status').textContent = '入库任务已创建：' + result.taskId;
+        }));
+        const remove = document.createElement('button');
+        remove.type = 'button'; remove.className = 'secondary'; remove.textContent = '删除文档';
+        remove.addEventListener('click', () => {
+          if (!confirm('删除“' + row.filename + '”及其解析文本、片段和向量？已有聊天历史会保留。')) return;
+          run(async () => {
+            const result = await read(await RagentAuth.fetch(`/api/knowledge-bases/${id}/documents/${row.id}`, {method:'DELETE'}));
+            clearDocumentViews(); await documents();
+            $('status').textContent = '文档已删除' + (result.pendingFileCleanups ? '；原文件清理待后台重试' : '，原文件已清理');
+          });
+        });
+        item.append(parse, preview, split, chunks, index, ingest, remove);
         $('documents').append(item);
       }
+    }
+    function chunkOptions() {
+      if (!$('chunk-size').reportValidity() || !$('chunk-overlap').reportValidity()) throw new Error('请检查切分参数');
+      const chunkSize = Number($('chunk-size').value), overlap = Number($('chunk-overlap').value);
+      if (overlap > Math.floor(chunkSize / 2)) throw new Error('重叠字符数不能超过每块长度的一半');
+      return {chunkSize, overlap};
+    }
+    function clearDocumentViews() {
+      clearChunks(); $('text-summary').textContent = '选择一份文档查看解析结果。'; $('parsed-text').textContent = '';
+      $('search-results').replaceChildren(); $('search-status').textContent = '';
+      $('search-trace').replaceChildren(); $('search-comparison').replaceChildren();
+    }
+    function renderTasks() {
+      $('ingestion-tasks').replaceChildren();
+      if (!latestTasks.length) { $('ingestion-tasks').textContent = '当前没有自动入库任务。'; return; }
+      const labels = {PENDING:'待处理', PARSING:'解析中', CHUNKING:'切块中', INDEXING:'向量化中', COMPLETED:'完成'};
+      for (const task of latestTasks) {
+        const item = document.createElement('li'); item.dataset.taskId = task.taskId;
+        const summary = document.createElement('span');
+        summary.textContent = '文档 ' + task.documentId + ' · ' + (task.status === 'FAILED' ? '失败于：' : '')
+          + (labels[task.stage] || task.stage) + ' · 第 ' + task.attempt + ' 次执行';
+        const progress = document.createElement('progress'); progress.max = 4;
+        progress.value = {PENDING:0,PARSING:0,CHUNKING:1,INDEXING:2,COMPLETED:4}[task.stage] || 0;
+        progress.setAttribute('aria-label', '已完成的入库阶段');
+        item.append(summary, document.createElement('br'), progress);
+        if (task.errorMessage) { const failure = document.createElement('p'); failure.textContent = task.errorCode + '：' + task.errorMessage; item.append(failure); }
+        if (task.status === 'FAILED') {
+          const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = '重试入库';
+          retry.addEventListener('click', () => run(async () => {
+            await post(`/api/knowledge-bases/${task.knowledgeBaseId}/ingestion-tasks/${task.taskId}/retry`, '');
+            await documents(); $('status').textContent = '已重新排队，将校验并复用已完成阶段';
+          }));
+          item.append(retry);
+        }
+        $('ingestion-tasks').append(item);
+      }
+    }
+    async function loadSettings() {
+      const id = $('knowledge-base').value;
+      if (!id) return;
+      const settings = await get(`/api/knowledge-bases/${id}/search/settings`);
+      if (id !== $('knowledge-base').value) return;
+      $('chunk-size').value = settings.chunkSize; $('chunk-overlap').value = settings.overlap;
+      $('search-top-k').value = settings.topK; $('search-min-score').value = settings.minScore;
+      $('search-recall-budget').value = settings.recallBudget; $('search-candidate-limit').value = settings.candidateLimit;
+      $('search-rerank').checked = settings.rerankEnabled;
+      $('search-settings').textContent = `聊天默认：召回 ${settings.recallBudget} → 候选 ${settings.candidateLimit} → 最多 ${settings.topK} 个片段，资料预算 ${settings.maxContextCharacters} 字符；重排${settings.rerankEnabled ? '开启' : '关闭'}。本次调试参数仅影响预览，检索会调用 Embedding 服务。`;
     }
     function clearChunks(message = '选择一份已解析文档，切分或查看片段。') {
       chunkSelection = null;
@@ -253,7 +351,95 @@
       for (const row of rows) $('knowledge-base').append(new Option(row.name, String(row.id)));
       if (rows.some(row => String(row.id) === String(selected))) $('knowledge-base').value = String(selected);
       await documents();
+      await loadSettings();
     }
+    $('delete-base').addEventListener('click', () => {
+      const id = $('knowledge-base').value;
+      if (!id || !confirm('删除当前知识库及其中全部文档、片段和向量？已有聊天历史会保留。')) return;
+      run(async () => {
+        const result = await read(await RagentAuth.fetch(`/api/knowledge-bases/${id}`, {method:'DELETE'}));
+        clearDocumentViews(); await bases();
+        $('status').textContent = '知识库已删除，清理了 ' + result.deletedDocuments + ' 份文档'
+          + (result.pendingFileCleanups ? '；部分原文件待后台重试清理' : '');
+      });
+    });
+    $('upload-ingest').addEventListener('click', () => run(async () => {
+      const id = $('knowledge-base').value, file = $('file').files[0];
+      if (!id || !file || !file.size) throw new Error('请先选择知识库和非空文件');
+      if (file.size > 10 * 1024 * 1024) throw new Error('单个文件不能超过 10 MB');
+      const form = new FormData(); form.append('file', file);
+      let result;
+      try {
+        result = await post(`/api/knowledge-bases/${id}/documents/ingest?` + new URLSearchParams(chunkOptions()), form);
+      } catch (error) {
+        try { await documents(); } catch (refreshError) { error.message += '；列表刷新失败：' + refreshError.message; }
+        throw error;
+      }
+      await documents(); $('upload-form').reset();
+      $('status').textContent = '文件已上传，后台入库任务：' + result.taskId;
+    }));
+    $('search-run').addEventListener('click', () => run(async () => {
+      const id = $('knowledge-base').value;
+      const options = searchOptions();
+      const started = performance.now();
+      const result = await post(`/api/knowledge-bases/${id}/search/detail`, JSON.stringify(options), true);
+      $('search-comparison').replaceChildren(); $('search-trace').replaceChildren();
+      const trace = document.createElement('p'); trace.textContent = traceLabel(result.retrieval); $('search-trace').append(trace);
+      showSearchSources(result.sources, $('search-results'));
+      $('search-status').textContent = `返回 ${result.sources.length} 个片段 · ${((performance.now()-started)/1000).toFixed(2)} 秒`;
+      $('status').textContent = result.sources.length ? '检索完成，可展开查看实际证据' : '没有满足当前条件的资料';
+    }));
+    function searchOptions() {
+      if (!$('knowledge-base').value || !$('search-question').value.trim()) throw new Error('请选择知识库并填写检索问题');
+      for (const id of ['search-top-k','search-min-score','search-recall-budget','search-candidate-limit']) {
+        if (!$(id).reportValidity()) throw new Error('请检查检索参数');
+      }
+      return {question:$('search-question').value,topK:Number($('search-top-k').value),minScore:Number($('search-min-score').value),
+        recallBudget:Number($('search-recall-budget').value),candidateLimit:Number($('search-candidate-limit').value),rerank:$('search-rerank').checked};
+    }
+    function traceLabel(trace) {
+      const labels = {APPLIED:'重排已应用',DISABLED:'未开启重排',SKIPPED_EMPTY:'没有候选，跳过重排',SKIPPED_BUDGET:'超出重排字符预算，保留向量排序',
+        FALLBACK_TIMEOUT:'重排超时，已回退向量排序',FALLBACK_ERROR:'重排失败，已回退向量排序',FALLBACK_NOT_CONFIGURED:'重排尚未配置，保留向量排序'};
+      return (labels[trace.rerankStatus] || trace.rerankStatus) + ` · 召回 ${trace.recalledCount} → 候选 ${trace.candidateCount} → 采用 ${trace.returnedCount}`
+        + ` · ${trace.contextCharacters} 字符 · 重排 ${trace.rerankMs}ms · 尝试 ${trace.rerankAttempts} 次`
+        + (trace.rerankTokens == null ? '' : ' · 平台报告 ' + trace.rerankTokens + ' Tokens') + (trace.errorCode ? ' · ' + trace.errorCode : '');
+    }
+    function showSearchSources(rows, target) {
+      target.replaceChildren();
+      rows.forEach((row, i) => {
+        const item = document.createElement('details'), title = document.createElement('summary'), text = document.createElement('pre');
+        title.textContent = `${i+1}. ${row.filename} · 第 ${row.chunkIndex+1} 块 · 向量分 ${row.score.toFixed(3)}`
+          + (row.rerankScore == null ? '' : ' · 重排分 ' + row.rerankScore.toFixed(3)) + ` · 原文位置 [${row.startOffset}, ${row.endOffset})`;
+        text.textContent = row.content; item.append(title,text); target.append(item);
+      });
+    }
+    function rankTable(rows) {
+      const table = document.createElement('table'); table.className = 'rank-table';
+      const head = document.createElement('tr');
+      for (const label of ['名次','文件 / 块','向量分','重排分']) { const cell = document.createElement('th'); cell.textContent = label; head.append(cell); }
+      table.append(head);
+      for (const row of rows) {
+        const tr = document.createElement('tr');
+        for (const value of [row.rank,row.filename+' / '+(row.chunkIndex+1),row.vectorScore.toFixed(3),row.rerankScore == null ? '—' : row.rerankScore.toFixed(3)]) {
+          const td = document.createElement('td'); td.textContent = value; tr.append(td);
+        }
+        table.append(tr);
+      }
+      return table;
+    }
+    $('search-compare').addEventListener('click', () => run(async () => {
+      const id = $('knowledge-base').value, options = searchOptions();
+      const result = await post(`/api/knowledge-bases/${id}/search/compare`,JSON.stringify(options),true);
+      $('search-results').replaceChildren(); $('search-trace').replaceChildren(); $('search-comparison').replaceChildren();
+      for (const [label, data] of [['向量排序',result.baseline],['重排结果',result.reranked]]) {
+        const panel = document.createElement('article'), title = document.createElement('h3'), summary = document.createElement('p'), sources = document.createElement('div');
+        title.textContent = label; summary.textContent = traceLabel(data.retrieval);
+        showSearchSources(data.sources,sources);
+        panel.append(title,summary,rankTable(data.retrieval.afterRerank),sources); $('search-comparison').append(panel);
+      }
+      $('search-status').textContent = '同一候选集对比 · 向量排序 ' + result.baseline.retrieval.totalMs + 'ms · 含重排 ' + result.reranked.retrieval.totalMs + 'ms';
+      $('status').textContent = result.reranked.retrieval.rerankStatus === 'APPLIED' ? '对比完成，请核对证据与排序变化' : '重排未应用，请查看具体状态，不能据此声称效果提升';
+    }));
     $('create-form').addEventListener('submit', event => {
       event.preventDefault();
       run(async () => {
@@ -284,8 +470,17 @@
       $('text-summary').textContent = '选择一份文档查看解析结果。';
       $('parsed-text').textContent = '';
       await documents(); $('status').textContent = '';
+      await loadSettings();
     }));
     $('refresh').addEventListener('click', () => run(async () => { await bases(); $('status').textContent = '列表已刷新'; }));
+    setInterval(async () => {
+      if (busy || $('identity').dataset.authenticated !== 'true' || !latestTasks.some(task => ['PENDING','RUNNING'].includes(task.status))) return;
+      const id = $('knowledge-base').value;
+      try {
+        const tasks = await get(`/api/knowledge-bases/${id}/ingestion-tasks`);
+        if (id === $('knowledge-base').value && JSON.stringify(tasks) !== taskFingerprint && !busy) await documents();
+      } catch (error) { $('status').textContent = error.message; }
+    }, 1000);
     (async () => {
       try {
         const user = await get('/api/auth/me');

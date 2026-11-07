@@ -1,6 +1,7 @@
 package com.dujiteng.ragentlearning.knowledge.service.impl;
 
 import com.dujiteng.ragentlearning.common.ChatApiException;
+import com.dujiteng.ragentlearning.knowledge.processing.DocumentProcessingCoordinator;
 import com.dujiteng.ragentlearning.knowledge.parse.DocumentParser;
 import com.dujiteng.ragentlearning.knowledge.repository.KnowledgeRepository;
 import com.dujiteng.ragentlearning.knowledge.service.DocumentParsingService;
@@ -16,11 +17,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class DocumentParsingServiceImpl implements DocumentParsingService {
     private static final System.Logger LOG = System.getLogger(DocumentParsingService.class.getName());
+    private final DocumentProcessingCoordinator coordinator;
     private final KnowledgeRepository repository;
     private final FileStorage storage;
     private final List<DocumentParser> parsers;
 
-    public DocumentParsingServiceImpl(KnowledgeRepository repository, FileStorage storage, List<DocumentParser> parsers) {
+    public DocumentParsingServiceImpl(KnowledgeRepository repository, FileStorage storage, List<DocumentParser> parsers, DocumentProcessingCoordinator coordinator) {
+        this.coordinator = coordinator;
         this.repository = repository;
         this.storage = storage;
         this.parsers = parsers;
@@ -28,6 +31,10 @@ public class DocumentParsingServiceImpl implements DocumentParsingService {
 
     @Override
     public DocumentTextVO parse(long userId, long knowledgeBaseId, long documentId) {
+        return coordinator.manual(userId, knowledgeBaseId, documentId, () -> parseDocument(userId, knowledgeBaseId, documentId));
+    }
+
+    private DocumentTextVO parseDocument(long userId, long knowledgeBaseId, long documentId) {
         var document = database(() -> repository.findDocument(userId, knowledgeBaseId, documentId));
         String token = UUID.randomUUID().toString();
         if (!database(() -> repository.startParsing(userId, knowledgeBaseId, documentId, token))) {

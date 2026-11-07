@@ -14,22 +14,22 @@ public interface KnowledgeDocumentMapper extends BaseMapper<KnowledgeDocumentDO>
     @Select(value = """
         INSERT INTO knowledge_document (knowledge_base_id, original_filename, file_type, file_size, storage_key)
         SELECT id, #{filename}, #{fileType}, #{size}, #{storageKey} FROM knowledge_base
-        WHERE id = #{knowledgeBaseId} AND user_id = #{userId} RETURNING *
+        WHERE id = #{knowledgeBaseId} AND user_id = #{userId} AND deleted_at IS NULL FOR SHARE RETURNING *
         """, affectData = true)
     KnowledgeDocumentDO createOwned(@Param("userId") long userId, @Param("knowledgeBaseId") long knowledgeBaseId,
         @Param("filename") String filename, @Param("fileType") String fileType, @Param("size") long size, @Param("storageKey") String storageKey);
-    @Select("SELECT " + META + " FROM knowledge_document d JOIN knowledge_base k ON k.id=d.knowledge_base_id WHERE k.id=#{knowledgeBaseId} AND k.user_id=#{userId} ORDER BY d.id DESC")
+    @Select("SELECT " + META + " FROM knowledge_document d JOIN knowledge_base k ON k.id=d.knowledge_base_id WHERE k.id=#{knowledgeBaseId} AND k.user_id=#{userId} AND k.deleted_at IS NULL ORDER BY d.id DESC")
     List<KnowledgeDocumentDO> listOwned(@Param("userId") long userId, @Param("knowledgeBaseId") long knowledgeBaseId);
-    @Select("SELECT " + META + " FROM knowledge_document d JOIN knowledge_base k ON k.id=d.knowledge_base_id WHERE d.id=#{documentId} AND k.id=#{knowledgeBaseId} AND k.user_id=#{userId}")
+    @Select("SELECT " + META + " FROM knowledge_document d JOIN knowledge_base k ON k.id=d.knowledge_base_id WHERE d.id=#{documentId} AND k.id=#{knowledgeBaseId} AND k.user_id=#{userId} AND k.deleted_at IS NULL")
     KnowledgeDocumentDO findOwned(@Param("userId") long userId, @Param("knowledgeBaseId") long knowledgeBaseId, @Param("documentId") long documentId);
-    @Select("SELECT d.* FROM knowledge_document d JOIN knowledge_base k ON k.id=d.knowledge_base_id WHERE d.id=#{documentId} AND k.id=#{knowledgeBaseId} AND k.user_id=#{userId}")
+    @Select("SELECT d.* FROM knowledge_document d JOIN knowledge_base k ON k.id=d.knowledge_base_id WHERE d.id=#{documentId} AND k.id=#{knowledgeBaseId} AND k.user_id=#{userId} AND k.deleted_at IS NULL")
     KnowledgeDocumentDO textOwned(@Param("userId") long userId, @Param("knowledgeBaseId") long knowledgeBaseId, @Param("documentId") long documentId);
     @Update("""
                 UPDATE knowledge_document d SET status = 'RUNNING', parsed_text = NULL,
                     error_message = NULL, parsed_at = NULL, parse_started_at = CURRENT_TIMESTAMP, parse_token = #{token},
                     chunk_version = NULL, chunk_size = NULL, chunk_overlap = NULL, chunk_count = 0, chunked_at = NULL, index_status = 'PENDING', index_error = NULL, index_token = NULL, index_started_at = NULL, indexed_revision = NULL, index_count = 0, indexed_at = NULL
                 WHERE d.id = #{documentId} AND d.knowledge_base_id = #{knowledgeBaseId}
-                  AND EXISTS (SELECT 1 FROM knowledge_base k WHERE k.id = d.knowledge_base_id AND k.user_id = #{userId})
+                  AND EXISTS (SELECT 1 FROM knowledge_base k WHERE k.id = d.knowledge_base_id AND k.user_id = #{userId} AND k.deleted_at IS NULL)
                   AND (d.status <> 'RUNNING' OR d.parse_started_at IS NULL
                        OR d.parse_started_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes')
                 """)
@@ -40,14 +40,14 @@ public interface KnowledgeDocumentMapper extends BaseMapper<KnowledgeDocumentDO>
                     parse_started_at = NULL, parse_token = NULL,
                     parse_version = parse_version + CASE WHEN #{status} = 'SUCCESS' THEN 1 ELSE 0 END
                 WHERE d.id = #{documentId} AND d.knowledge_base_id = #{knowledgeBaseId} AND d.status = 'RUNNING' AND d.parse_token = #{token}
-                  AND EXISTS (SELECT 1 FROM knowledge_base k WHERE k.id = d.knowledge_base_id AND k.user_id = #{userId})
+                  AND EXISTS (SELECT 1 FROM knowledge_base k WHERE k.id = d.knowledge_base_id AND k.user_id = #{userId} AND k.deleted_at IS NULL)
                 """)
     int finishParsing(@Param("userId") long userId, @Param("knowledgeBaseId") long knowledgeBaseId, @Param("documentId") long documentId,
         @Param("token") String token, @Param("text") String text, @Param("error") String error, @Param("status") String status);
 
     @Select("""
         SELECT d.* FROM knowledge_document d JOIN knowledge_base k ON k.id = d.knowledge_base_id
-        WHERE d.id = #{documentId} AND k.id = #{knowledgeBaseId} AND k.user_id = #{userId}
+        WHERE d.id = #{documentId} AND k.id = #{knowledgeBaseId} AND k.user_id = #{userId} AND k.deleted_at IS NULL
         FOR UPDATE OF d
         """)
     KnowledgeDocumentDO lockOwned(@Param("userId") long userId, @Param("knowledgeBaseId") long knowledgeBaseId,
@@ -59,7 +59,7 @@ public interface KnowledgeDocumentMapper extends BaseMapper<KnowledgeDocumentDO>
             chunk_revision = chunk_revision + 1, index_status = 'PENDING', index_error = NULL, index_token = NULL, index_started_at = NULL, indexed_revision = NULL, index_count = 0, indexed_at = NULL
         WHERE d.id = #{documentId} AND d.knowledge_base_id = #{knowledgeBaseId}
           AND d.status = 'SUCCESS' AND d.parse_version = #{version}
-          AND EXISTS (SELECT 1 FROM knowledge_base k WHERE k.id = d.knowledge_base_id AND k.user_id = #{userId})
+          AND EXISTS (SELECT 1 FROM knowledge_base k WHERE k.id = d.knowledge_base_id AND k.user_id = #{userId} AND k.deleted_at IS NULL)
         """)
     int markChunked(@Param("userId") long userId, @Param("knowledgeBaseId") long knowledgeBaseId,
                     @Param("documentId") long documentId, @Param("version") long version,

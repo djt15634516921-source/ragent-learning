@@ -15,6 +15,9 @@ import {verifyRag} from './verify-rag.mjs';
 import {mockEmbedding} from './mock-embedding.mjs';
 import {mockRewrite} from './mock-rewrite.mjs';
 import {verifyRewrite} from './verify-rewrite.mjs';
+import {verifyLifecycle} from './verify-lifecycle.mjs';
+import {mockRerank} from './mock-rerank.mjs';
+import {verifyRerank} from './verify-rerank.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const runId = randomUUID().slice(0, 8);
@@ -117,6 +120,7 @@ try {
       let body = ''; for await (const chunk of request) body += chunk;
       const input = JSON.parse(body);
       if (request.url === '/embeddings') { await mockEmbedding(input, response); return; }
+      if (request.url === '/rerank') { await mockRerank(input,response); return; }
       // 其余接口仍须是 Chat Completions 载荷。
       if (!Array.isArray(input.messages)) { response.writeHead(400).end(); return; }
       if (await mockRewrite(input, response)) return;
@@ -165,6 +169,8 @@ try {
     AUTH_REDIS_PREFIX: redisPrefix,
     CHAT_STREAM_TIMEOUT_MS: '1500',
     RAG_REWRITE_ENABLED: 'true', RAG_REWRITE_TIMEOUT_MS: '400',
+    RAG_RERANK_ENABLED:'true', RERANK_URL:`http://127.0.0.1:${modelPort}/rerank`, RERANK_MODEL:'qwen3-rerank', RERANK_API_KEY:'local-test', RERANK_TIMEOUT_MS:'2500',
+    KNOWLEDGE_INGESTION_POLL_MS:'200', KNOWLEDGE_INGESTION_LEASE_MS:'3000', KNOWLEDGE_CLEANUP_POLL_MS:'200',
     EMBEDDING_URL: `http://127.0.0.1:${modelPort}/embeddings`, EMBEDDING_API_KEY: 'local-test',
     LLM_CHAT_URL: `http://127.0.0.1:${modelPort}/chat`, LLM_MODEL: 'local-test', LLM_API_KEY: 'local-test'};
   async function startApplication(logName) {
@@ -447,6 +453,8 @@ try {
   const chunkResult = await verifyChunks({a, b, anonymous, kb, secondKb, sql, container, storage, until, passed});
   const ragResult = await verifyRag({a, b, anonymous, kb, secondKb, sql, modelCalls, until, passed});
   const rewriteResult = await verifyRewrite({a, b, kb, secondKb, sql, modelCalls, passed});
+  await verifyLifecycle({client,sql,storage,work,until,passed,stopApplication,startApplication,modelCalls});
+  await verifyRerank({client,sql,work,until,passed,modelCalls});
   await stopApplication();
   await startApplication('restart.log');
   assert.equal((await a.request('/api/auth/me')).status, 200);

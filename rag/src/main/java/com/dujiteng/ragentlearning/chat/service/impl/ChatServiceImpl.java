@@ -14,6 +14,7 @@ import com.dujiteng.ragentlearning.infra.llm.StreamCancellation;
 import com.dujiteng.ragentlearning.rag.core.prompt.RAGPromptService;
 import com.dujiteng.ragentlearning.rag.core.workflow.RagContext;
 import com.dujiteng.ragentlearning.rag.core.workflow.RagWorkflow;
+import com.dujiteng.ragentlearning.knowledge.vo.RetrievalTraceVO;
 import java.util.List;
 import java.util.function.Consumer;
 import org.springframework.stereotype.Service;
@@ -40,24 +41,24 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public ChatResponseVO chat(long userId, String conversationId, String question, Long knowledgeBaseId) {
+    public ChatResponseVO chat(long userId, String conversationId, String question, Long knowledgeBaseId, Boolean rerank) {
         ChatRequest input = validateRequest(conversationId, question);
         Conversation conversation = prepare(userId, input.conversationId(), knowledgeBaseId);
         synchronized (conversation) {
             var cancellation = new StreamCancellation();
             var history = conversation.history();
             var context = knowledgeBaseId == null ? null
-                    : workflow.prepare(userId, knowledgeBaseId, input.question(), history, cancellation);
+                    : workflow.prepare(userId, knowledgeBaseId, input.question(), history, cancellation, rerank);
             String answer = context != null && context.directAnswer() != null ? context.directAnswer()
                     : llm.chat(prompts.build(SYSTEM_PROMPT, input.question(), history, context), cancellation);
             var response = response(answer, knowledgeBaseId, context);
-            conversation.appendTurn(input.question(), answer, response.sources());
+            cancellation.commit(() -> conversation.appendTurn(input.question(), answer, response.sources()));
             return response;
         }
     }
 
     @Override
-    public ChatResponseVO streamChat(long userId, String conversationId, String question, Long knowledgeBaseId,
+    public ChatResponseVO streamChat(long userId, String conversationId, String question, Long knowledgeBaseId, Boolean rerank,
                                      Consumer<String> onDelta, StreamCancellation cancellation) {
         ChatRequest input = validateRequest(conversationId, question);
         cancellation.check();
@@ -66,7 +67,7 @@ public class ChatServiceImpl implements ChatService {
             cancellation.check();
             var history = conversation.history();
             var context = knowledgeBaseId == null ? null
-                    : workflow.prepare(userId, knowledgeBaseId, input.question(), history, cancellation);
+                    : workflow.prepare(userId, knowledgeBaseId, input.question(), history, cancellation, rerank);
             cancellation.check();
             String answer;
             if (context != null && context.directAnswer() != null) {
@@ -77,14 +78,15 @@ public class ChatServiceImpl implements ChatService {
             }
             cancellation.check();
             var response = response(answer, knowledgeBaseId, context);
-            conversation.appendTurn(input.question(), answer, response.sources());
+            cancellation.commit(() -> conversation.appendTurn(input.question(), answer, response.sources()));
             return response;
         }
     }
 
     private static ChatResponseVO response(String answer, Long knowledgeBaseId, RagContext context) {
         return new ChatResponseVO(answer, context == null ? List.of() : context.sources(), knowledgeBaseId,
-                context == null ? null : QueryRewriteVO.from(context.rewrite()));
+                context == null ? null : QueryRewriteVO.from(context.rewrite()),
+                context == null ? null : RetrievalTraceVO.from(context.retrieval()));
     }
 
     /** 在 SSE 建立之前确定归属；worker 随后仍会检查。新会话此时可能只有会话行、还没有消息。 */

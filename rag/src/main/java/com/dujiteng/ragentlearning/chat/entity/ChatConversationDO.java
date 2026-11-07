@@ -11,6 +11,9 @@ public class ChatConversationDO {
     private String conversationId;
     private Long userId;
     private OffsetDateTime createdAt;
+    private OffsetDateTime deletedAt;
+    public OffsetDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(OffsetDateTime deletedAt) { this.deletedAt = deletedAt; }
     public String getConversationId() { return conversationId; }
     public void setConversationId(String conversationId) { this.conversationId = conversationId; }
     public Long getUserId() { return userId; }

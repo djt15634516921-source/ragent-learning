@@ -1,0 +1,13 @@
+{
+  "label": "D14-existing-synthetic-corpus-rerank",
+  "corpusDirectory": "docs/examples/rag-eval",
+  "notes": "先把corpusDirectory中的五份合成资料上传到独立知识库并完成入库。每题独立，不使用旧会话事实。expectedFiles评文件命中，expectedEvidence仅评字面覆盖，答案需人工检查。",
+  "cases": [
+    {"id": "reply-deadline", "question": "月泉系统工单最晚多久需要首次回复？", "expectedFiles": ["02-月泉工单规则.md"], "expectedEvidence": ["两个工作日"]},
+    {"id": "acceptance-time", "question": "星河学习项目每周什么时候验收？", "expectedFiles": ["01-星河项目验收.md"], "expectedEvidence": ["每周四下午三点"]},
+    {"id": "similar-name", "question": "青禾学习项目验收时需要报什么口令？", "expectedFiles": ["04-青禾项目验收.md"], "expectedEvidence": ["松涛3816"]},
+    {"id": "multiple-facts", "question": "月泉系统首次回复时限是多少，星河学习项目每周什么时候验收？", "expectedFiles": ["02-月泉工单规则.md", "01-星河项目验收.md"], "expectedEvidence": ["两个工作日", "每周四下午三点"]},
+    {"id": "missing-phone", "question": "星河学习项目验收负责人林老师的手机号是多少？", "expectedFiles": ["01-星河项目验收.md"], "expectedEvidence": [], "manualExpected": "资料未提供手机号，应明确无法确定。"},
+    {"id": "missing-fee", "question": "月泉系统提交一张工单要收多少钱？", "expectedFiles": ["02-月泉工单规则.md"], "expectedEvidence": [], "manualExpected": "资料未规定收费，不能编造50元或其他金额。"}
+  ]
+}

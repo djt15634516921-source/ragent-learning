@@ -1,0 +1,35 @@
+@baseUrl = http://localhost:18081
+@token = {{$processEnv RAG_EVAL_TOKEN}}
+@knowledgeBaseId = {{$processEnv RAG_EVAL_KNOWLEDGE_BASE_ID}}
+
+### 归属校验后读取实际默认配置；不调用模型
+GET {{baseUrl}}/api/knowledge-bases/{{knowledgeBaseId}}/search/settings
+Authorization: Bearer {{token}}
+
+### 同一候选快照对比；一次问题Embedding、一次重排，不生成回答
+POST {{baseUrl}}/api/knowledge-bases/{{knowledgeBaseId}}/search/compare
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"question":"月泉系统工单首次回复时限是多少？","recallBudget":16,"candidateLimit":12,"topK":4,"minScore":0.35}
+
+### 检索观察：关闭重排，保留向量排序
+POST {{baseUrl}}/api/knowledge-bases/{{knowledgeBaseId}}/search/detail
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"question":"月泉系统工单首次回复时限是多少？","recallBudget":16,"candidateLimit":12,"topK":4,"rerank":false}
+
+### 普通回答：新会话，不带旧助手事实；写入本账号聊天记录
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"conversationId":"manual-rerank-001","knowledgeBaseId":{{knowledgeBaseId}},"question":"月泉系统工单首次回复时限是多少？","rerank":true}
+
+### 流式：done保存成功后返回最终来源和retrieval；不把Token放到URL
+POST {{baseUrl}}/api/chat/stream
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"conversationId":"manual-rerank-stream-001","knowledgeBaseId":{{knowledgeBaseId}},"question":"月泉系统工单首次回复时限是多少？","rerank":true}

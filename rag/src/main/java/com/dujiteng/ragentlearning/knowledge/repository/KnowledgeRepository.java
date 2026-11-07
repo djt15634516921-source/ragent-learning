@@ -37,12 +37,12 @@ public class KnowledgeRepository {
         return baseView(row);
     }
     public List<KnowledgeBaseVO> list(long userId) {
-        return bases.selectList(new QueryWrapper<KnowledgeBaseDO>().eq("user_id", userId).orderByDesc("id"))
+        return bases.selectList(new QueryWrapper<KnowledgeBaseDO>().eq("user_id", userId).isNull("deleted_at").orderByDesc("id"))
                 .stream().map(KnowledgeRepository::baseView).toList();
     }
     public void requireOwner(long userId, long knowledgeBaseId) {
         if (bases.selectCount(new QueryWrapper<KnowledgeBaseDO>()
-                .eq("id", knowledgeBaseId).eq("user_id", userId)) == 0) {
+                .eq("id", knowledgeBaseId).eq("user_id", userId).isNull("deleted_at")) == 0) {
             throw new ChatApiException(404, "KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在或不属于当前用户");
         }
     }

@@ -1,0 +1,15 @@
+{
+  "label": "D14固定资料的文档级检索检查，答案与证据完整性另行人工判断",
+  "cases": [
+    {"id":"Q01","question":"星河学习项目的验收口令是什么？","expectedFiles":["01-星河项目验收.md"]},
+    {"id":"Q02","question":"谁负责星河学习项目验收？","expectedFiles":["01-星河项目验收.md"]},
+    {"id":"Q03","question":"星河学习项目每周什么时候验收？","expectedFiles":["01-星河项目验收.md"]},
+    {"id":"Q04","question":"参加星河学习项目验收需要报哪个暗号？","expectedFiles":["01-星河项目验收.md"]},
+    {"id":"Q05","question":"月泉系统本次演示的工单编号是什么？","expectedFiles":["02-月泉工单规则.md"]},
+    {"id":"Q06","question":"月泉系统工单最晚多久要首次回复？","expectedFiles":["02-月泉工单规则.md"]},
+    {"id":"Q07","question":"月泉系统工单超时后找谁处理？","expectedFiles":["02-月泉工单规则.md"]},
+    {"id":"Q08","question":"月泉工单的首次回复时限是多少？另外星河学习项目每周什么时候验收？","expectedFiles":["02-月泉工单规则.md","01-星河项目验收.md"]},
+    {"id":"Q09","question":"林老师的手机号是多少？","expectedFiles":[]},
+    {"id":"Q10","question":"月泉系统每提交一张工单要收多少钱？","expectedFiles":[]}
+  ]
+}

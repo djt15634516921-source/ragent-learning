@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {verifyLifecycleBrowser} from './verify-lifecycle-browser.mjs';
+import {verifyRerankBrowser} from './verify-rerank-browser.mjs';
 
 export async function verifyBrowser({root, origin, work, passed}) {
   const require = createRequire(import.meta.url);
@@ -115,6 +117,8 @@ export async function verifyBrowser({root, origin, work, passed}) {
     await page.screenshot({path: join(work, 'rag-chat-page.png'), fullPage: true});
     passed('真实 Edge：手动向量化、选择知识库、普通/SSE 问答和资料来源显示');
     passed('真实 Edge：连续追问显示补全后的检索问题，输入框与历史保留用户原话');
+    await verifyLifecycleBrowser({page,origin,work,passed});
+    await verifyRerankBrowser({page,origin,work,passed});
     await page.locator('#logout').click();
     await page.waitForFunction(() => document.querySelector('#chat-status').textContent.includes('已退出'));
     assert.ok(await page.evaluate(() => !sessionStorage.getItem('ragent-learning-token')));

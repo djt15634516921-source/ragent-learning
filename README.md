@@ -6,6 +6,10 @@
 
 学习工程：`D:\jastudy\idea\ragent-learning`。参考工程：`D:\jastudy\idea\ragent`。
 
+2026-11-06 增加知识库/文档删除、一键与后台入库、任务进度与重试、会话删除、历史分页、显式停止生成及检索调试/基础评测，见[知识库闭环说明](docs/18-knowledge-lifecycle.md)。原独立上传/解析/切分/向量化接口保留；历史来源快照与自定义提示词保留。重启应用自动执行增量SQL，无需新增凭证。
+
+随后按原项目源码接入可选Rerank，拆分召回/候选/最终上下文预算，并提供同候选排序及答案对照工具，见[重排实现与学习说明](docs/19-rerank-retrieval-budget.md)。默认关闭重排；启用需在IDEA环境变量填写RERANK_URL并设置RAG_RERANK_ENABLED=true，密钥默认复用LLM_API_KEY。无需重建表、升级依赖或重新向量化现有资料。
+
 ## 本机启动
 
 1. 启动 PostgreSQL 和 Redis。现有 Redis 对外端口为 6379；密码以原项目 `bootstrap/src/main/resources/application.yaml` 为准，不要依赖记忆中的值。
@@ -29,7 +33,10 @@
 | KNOWLEDGE_STORAGE_ROOT | 默认 data/knowledge，沿用已有原文件目录 |
 | LLM_CHAT_URL / LLM_MODEL / LLM_API_KEY | 沿用现有可用模型配置，参数不变 |
 | EMBEDDING_URL / MODEL / API_KEY | 地址默认从聊天地址派生；模型 text-embedding-v4、1024 维；密钥默认复用 LLM_API_KEY |
-| RAG_TOP_K / RAG_MIN_SCORE / RAG_MAX_INDEX_CHUNKS | 默认 4 / 0.35 / 500，控制召回与单文档向量化规模 |
+| RAG_TOP_K / RAG_MIN_SCORE / RAG_MAX_INDEX_CHUNKS | 默认 4 / 0.35 / 500，最终片段数、最低向量余弦分与单文档向量化规模 |
+| RAG_RECALL_BUDGET / RAG_RERANK_CANDIDATE_LIMIT | 默认16 / 12，召回上限与送重排候选上限；不能小于最终Top-K |
+| RAG_RERANK_ENABLED / RERANK_URL / RERANK_MODEL | 默认false / 空 / qwen3-rerank；URL需配置百炼原生排序端点 |
+| RERANK_API_KEY / RERANK_TIMEOUT_MS / RAG_RERANK_MAX_INPUT_CHARS | 默认复用LLM_API_KEY / 3000ms完整响应总超时 / 24000粗略字符预算 |
 | RAG_REWRITE_ENABLED / RAG_REWRITE_TIMEOUT_MS | 默认 true / 3000；知识库连续提问额外调用一次现有模型补全检索问题，失败/超时明确标记回退 |
 
 ## 当前认证协议
@@ -45,6 +52,9 @@
 ## 代码与学习说明
 
 - [当前学习重点：教程亮点对照、阶段验收与下一步](docs/15-core-learning-roadmap.md)。
+- [当前知识库闭环：删除、后台入库、聊天管理与基础检索评测](docs/18-knowledge-lifecycle.md)。
+- [当前重排：源码对应、三段预算、调用链和前后对比](docs/19-rerank-retrieval-budget.md)，[HTTP样例](docs/http/rerank-requests.http)。
+- [闭环HTTP样例](docs/http/lifecycle-requests.http)：包含删除操作，使用明确选定的独立测试资料。
 - [当前架构：RAG核心、统一模型入口与重排扩展位置](docs/17-rag-architecture-alignment.md)。
 - [当前 D15：连续追问改写、输入输出与验收](docs/16-query-rewrite.md)。
 - [当前 D11：知识库检索问答与实际调用链](docs/13-knowledge-rag.md)。
@@ -79,7 +89,11 @@ $env:RUN_BROWSER_CHECK = 'true'
 node scripts/verify-knowledge.mjs
 ```
 
-报告与日志在 `target/knowledge-test-<随机编号>/`。Maven verify负责构建，业务回归由Node脚本执行。最新架构对齐通过19个单元测试及58组集成/Edge检查，见 [架构验收记录](docs/17-rag-architecture-alignment.md)。D15用户曾完成一条真实模型连续追问观察，见 [D15验收记录](docs/16-query-rewrite.md)；本次架构版本未追加真实付费调用，系统性真实效果评测仍待完成。此前真实百炼最小RAG历史结果见 [D11验收记录](docs/13-knowledge-rag-verification.md)，不能把编译或假模型通过等同于真实模型效果通过。
+报告与日志在 `target/knowledge-test-<随机编号>/`。Maven verify负责构建，业务回归由Node脚本执行。2026-11-06本轮通过22个单元测试及76组接口/真实Edge检查，报告为 `target/knowledge-test-79450383/result.json`，持久验收摘要见[本轮验证记录](docs/evaluation/2026-11-06-knowledge-lifecycle.json)。涵盖删除回滚、文件清理补偿、入库重试/重启/阶段复用、历史分页和显式取消；本轮仅调用隔离假模型，未新增真实付费调用。基础评测工具可记录文档级命中、排序、模型标识/profile和耗时，实际回答质量仍需独立验证。
+
+随后重排增量验证通过32个单元测试（新增10个）及85组接口/真实Edge检查（包含原闭环回归），最新报告为`target/knowledge-test-7632bbe9/result.json`，见[重排验收记录](docs/evaluation/2026-11-06-rerank.json)。覆盖原第7名证据重排、共享候选A/B、独立新会话答案对照、预算、响应校验、回退、取消和旧来源JSON兼容。仅本机假模型，无新增真实付费调用；真实端点权限与质量尚未验收。
+
+此前架构对齐19测试/58组结果保留在[架构验收记录](docs/17-rag-architecture-alignment.md)。D15用户曾完成一条真实模型连续追问观察，见[D15验收记录](docs/16-query-rewrite.md)；真实百炼最小RAG历史结果见[D11验收记录](docs/13-knowledge-rag-verification.md)。功能回归和确定性假向量评测不等同于真实模型效果通过。
 
 ## 本机 Redis 登录错误排查
 

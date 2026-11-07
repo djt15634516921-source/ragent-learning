@@ -1,6 +1,7 @@
 package com.dujiteng.ragentlearning.knowledge.service.impl;
 
 import com.dujiteng.ragentlearning.common.ChatApiException;
+import com.dujiteng.ragentlearning.knowledge.processing.DocumentProcessingCoordinator;
 import com.dujiteng.ragentlearning.infra.embedding.EmbeddingClient;
 import com.dujiteng.ragentlearning.knowledge.repository.DocumentVectorRepository;
 import com.dujiteng.ragentlearning.knowledge.service.DocumentIndexService;
@@ -15,13 +16,15 @@ import org.springframework.transaction.TransactionException;
 @Service
 public class DocumentIndexServiceImpl implements DocumentIndexService {
     private static final System.Logger LOG = System.getLogger(DocumentIndexServiceImpl.class.getName());
+    private final DocumentProcessingCoordinator coordinator;
     private final DocumentVectorRepository repository;
     private final EmbeddingClient embedding;
     private final int maximumChunks;
 
-    public DocumentIndexServiceImpl(DocumentVectorRepository repository, EmbeddingClient embedding,
+    public DocumentIndexServiceImpl(DocumentVectorRepository repository, EmbeddingClient embedding, DocumentProcessingCoordinator coordinator,
             @Value("${rag.max-index-chunks:500}") int maximumChunks) {
         if (maximumChunks < 1 || maximumChunks > 5000) throw new IllegalArgumentException("向量化上限须为 1～5000");
+        this.coordinator = coordinator;
         this.repository = repository;
         this.embedding = embedding;
         this.maximumChunks = maximumChunks;
@@ -35,6 +38,10 @@ public class DocumentIndexServiceImpl implements DocumentIndexService {
 
     @Override
     public DocumentIndexVO index(long userId, long knowledgeBaseId, long documentId) {
+        return coordinator.manual(userId, knowledgeBaseId, documentId, () -> indexDocument(userId, knowledgeBaseId, documentId));
+    }
+
+    private DocumentIndexVO indexDocument(long userId, long knowledgeBaseId, long documentId) {
         DocumentVectorRepository.Task task;
         try { task = repository.begin(userId, knowledgeBaseId, documentId, embedding.profile(), maximumChunks);
         } catch (DataAccessException | TransactionException error) { throw database(error); }

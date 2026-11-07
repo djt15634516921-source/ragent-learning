@@ -3,6 +3,7 @@ package com.dujiteng.ragentlearning.chat.controller;
 import cn.dev33.satoken.stp.StpUtil;
 import com.dujiteng.ragentlearning.chat.dto.ChatRequest;
 import com.dujiteng.ragentlearning.chat.service.ChatService;
+import com.dujiteng.ragentlearning.chat.stream.ChatStreamRegistry;
 import com.dujiteng.ragentlearning.chat.vo.ChatMessageVO;
 import com.dujiteng.ragentlearning.chat.vo.ChatResponseVO;
 import com.dujiteng.ragentlearning.chat.vo.ConversationVO;
@@ -36,21 +37,23 @@ public class ChatController {
     private final ChatService chatService;
     private final ExecutorService streamExecutor;
     private final long streamTimeoutMs;
+    private final ChatStreamRegistry streams;
 
     public ChatController(ChatService chatService,
                           @Qualifier("chatStreamExecutor") ExecutorService streamExecutor,
-                          @Value("${chat.stream-timeout-ms}") long streamTimeoutMs) {
+                          @Value("${chat.stream-timeout-ms}") long streamTimeoutMs, ChatStreamRegistry streams) {
         if (streamTimeoutMs <= 0) throw new IllegalArgumentException("流式超时必须大于零");
         this.chatService = chatService;
         this.streamExecutor = streamExecutor;
         this.streamTimeoutMs = streamTimeoutMs;
+        this.streams = streams;
     }
 
     @PostMapping(value = "/chat", produces = "application/json;charset=UTF-8")
     public ChatResponseVO chat(@RequestBody ChatRequest request) {
         String id = request == null ? null : request.conversationId();
         String question = request == null ? null : request.question();
-        return chatService.chat(StpUtil.getLoginIdAsLong(), id, question, request == null ? null : request.knowledgeBaseId());
+        return chatService.chat(StpUtil.getLoginIdAsLong(), id, question, request == null ? null : request.knowledgeBaseId(), request == null ? null : request.rerank());
     }
 
     @GetMapping("/conversations")
@@ -72,18 +75,23 @@ public class ChatController {
         // 身份在请求线程确定，再把普通 long 变量传进线程池；不用 worker 中的 ThreadLocal 猜用户。
         long userId = StpUtil.getLoginIdAsLong();
         Long knowledgeBaseId = request == null ? null : request.knowledgeBaseId();
+        Boolean rerank = request == null ? null : request.rerank();
         chatService.prepareConversation(userId, input.conversationId(), knowledgeBaseId);
         SseEmitter emitter = new SseEmitter(streamTimeoutMs);
         StreamCancellation cancellation = new StreamCancellation();
         AtomicBoolean terminal = new AtomicBoolean();
         AtomicReference<Future<?>> task = new AtomicReference<>();
         Runnable cancel = () -> {
-            cancellation.cancel();
+            if (!cancellation.cancel()) return;
             Future<?> current = task.get();
             if (current != null) {
                 current.cancel(true);
             }
         };
+        String streamId = streams.register(userId, input.conversationId(), cancellation, () -> {
+            cancel.run();
+            if (cancellation.isCancelled() && terminal.compareAndSet(false, true)) emitter.complete();
+        });
         emitter.onTimeout(() -> {
             if (terminal.compareAndSet(false, true)) {
                 cancel.run();
@@ -95,6 +103,7 @@ public class ChatController {
             cancel.run();
         });
         emitter.onCompletion(() -> {
+            streams.remove(streamId);
             if (terminal.compareAndSet(false, true)) {
                 cancel.run();
             }
@@ -103,8 +112,8 @@ public class ChatController {
         try {
             Future<?> future = streamExecutor.submit(() -> {
                 try {
-                    send(emitter, cancellation, "start", Map.of("conversationId", input.conversationId()));
-                    ChatResponseVO result = chatService.streamChat(userId, input.conversationId(), input.question(), knowledgeBaseId, text -> {
+                    send(emitter, cancellation, "start", Map.of("conversationId", input.conversationId(), "streamId", streamId));
+                    ChatResponseVO result = chatService.streamChat(userId, input.conversationId(), input.question(), knowledgeBaseId, rerank, text -> {
                         if (terminal.get()) {
                             throw new StreamCancellation.Cancelled();
                         }
@@ -122,6 +131,8 @@ public class ChatController {
                 } catch (RuntimeException error) {
                     LOG.log(System.Logger.Level.ERROR, "流式任务意外失败，异常类型：{0}", error.getClass().getName());
                     fail(emitter, cancellation, terminal, "CHAT_STREAM_FAILED", "流式处理失败，请检查后端运行情况");
+                } finally {
+                    streams.remove(streamId);
                 }
             });
             task.set(future);
@@ -129,6 +140,7 @@ public class ChatController {
                 future.cancel(true);
             }
         } catch (RejectedExecutionException error) {
+            streams.remove(streamId);
             cancellation.cancel();
             emitter.complete();
             throw new ChatApiException(503, "CHAT_BUSY", "当前聊天任务较多，请稍后重试");

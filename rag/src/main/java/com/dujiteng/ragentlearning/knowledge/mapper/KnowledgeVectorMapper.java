@@ -16,7 +16,7 @@ public interface KnowledgeVectorMapper extends BaseMapper<KnowledgeVectorDO> {
     // 当前学习规模用精确余弦检索，先过滤归属/版本，再排序，不提前引入近似索引。
     String READY = " FROM knowledge_chunk_vector v JOIN knowledge_chunk c ON c.id=v.chunk_id "
             + "JOIN knowledge_document d ON d.id=c.document_id JOIN knowledge_base k ON k.id=d.knowledge_base_id "
-            + "WHERE k.id=#{knowledgeBaseId} AND k.user_id=#{userId} AND d.status='SUCCESS' AND d.chunk_version=d.parse_version "
+            + "WHERE k.id=#{knowledgeBaseId} AND k.user_id=#{userId} AND k.deleted_at IS NULL AND d.status='SUCCESS' AND d.chunk_version=d.parse_version "
             + "AND c.source_version=d.parse_version AND v.source_version=d.parse_version "
             + "AND d.index_status='SUCCESS' AND d.indexed_revision=d.chunk_revision AND v.chunk_revision=d.chunk_revision "
             + "AND v.embedding_profile=#{profile} AND d.index_profile=#{profile}";
@@ -25,7 +25,7 @@ public interface KnowledgeVectorMapper extends BaseMapper<KnowledgeVectorDO> {
     @Select("""
         SELECT c.id AS chunk_id, d.id AS document_id, d.original_filename AS filename, c.chunk_index,
                c.start_offset, c.end_offset, c.content, 1 - (v.embedding <=> CAST(#{vector} AS vector)) AS score,
-               c.source_version
+               c.source_version, NULL::double precision AS rerank_score
         """ + READY + " AND 1 - (v.embedding <=> CAST(#{vector} AS vector)) >= #{minimum} "
             + "ORDER BY v.embedding <=> CAST(#{vector} AS vector), c.id LIMIT #{limit}")
     List<RetrievedSourceVO> search(@Param("userId") long userId, @Param("knowledgeBaseId") long knowledgeBaseId, @Param("profile") String profile,

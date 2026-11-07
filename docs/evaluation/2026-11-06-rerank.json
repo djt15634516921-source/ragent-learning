@@ -1,0 +1,128 @@
+{
+  "date": "2026-11-06",
+  "scope": "单路向量召回后的Rerank、三段检索预算、同候选对照和普通/SSE接入",
+  "referenceCommit": "200dca86ac04d3a27f7cfffd7d3dd4d2b1c41129",
+  "learningHead": "66676cc1bc47b4b002100c969e57aed911d18de5",
+  "worktree": "本地未提交增量；包含此前知识库闭环改动，不自动提交或推送",
+  "validation": {
+    "unitTests": {
+      "passed": 32,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "suites": [
+        {
+          "name": "com.dujiteng.ragentlearning.infra.llm.LLMServiceTest",
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.dujiteng.ragentlearning.infra.llm.StreamCancellationTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.dujiteng.ragentlearning.infra.rerank.BaiLianRerankClientTest",
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.dujiteng.ragentlearning.knowledge.chunk.TextSplitterTest",
+          "tests": 9,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.dujiteng.ragentlearning.rag.core.retrieval.RerankPostProcessorTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.dujiteng.ragentlearning.rag.core.rewrite.QueryRewriteServiceTest",
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    },
+    "integrationAndEdge": {
+      "passedGroups": 85,
+      "report": "target/knowledge-test-7632bbe9/result.json",
+      "newRerankChecks": [
+        "重排：一次召回共享候选，原第7名证据进入首位，原始正文/向量分保留，三段预算与使用量可见",
+        "重排：未召回证据不能被恢复，非法预算和他人/无索引资源在模型调用前拒绝",
+        "重排：关闭/无命中/超字符预算不调用，429/坏索引/响应体超时显式回退且不重复请求",
+        "重排：普通/SSE使用相同重排证据，完整回答后保存来源分数，旧JSON快照兼容，普通聊天不调用",
+        "重排：远程等待时显式取消/流式超时均停止后续回答，不降级继续生成，不保存半轮或发送done",
+        "重排：先排完整候选再限制上下文，跳过超预算整块并继续选取，最终片段数和字符预算同时生效",
+        "重排：同候选检索A/B、独立新会话答案对照与证据字面覆盖报告；模拟结果不冒充真实模型质量",
+        "真实 Edge：三段预算、同候选排序对照、独立向量/重排分与限流回退提示",
+        "真实 Edge：普通与流式聊天展示重排状态、正确首位证据和两个独立分数"
+      ]
+    },
+    "models": "仅本机确定性假Embedding/Chat/Rerank服务；模型名是协议配置，不代表调用了真实提供方",
+    "providerPaidCalls": 0,
+    "comparison": {
+      "report": "target/knowledge-test-7632bbe9/rerank-comparison.json",
+      "datasetSha256": "f60c636a452083da40134beaab8fa36bf8fdc71128d448e28587cf04c689ef35",
+      "configuration": {
+        "topK": 4,
+        "minScore": 0.35,
+        "maxTopK": 20,
+        "maxContextCharacters": 6000,
+        "chunkSize": 800,
+        "overlap": 120,
+        "embeddingModel": "text-embedding-v4",
+        "embeddingDimensions": 1024,
+        "embeddingProfile": "7952a03a78c574c1261f4d22b69303242063fbac4d5271b7077502b1290b4f0e",
+        "recallBudget": 16,
+        "candidateLimit": 12,
+        "rerankEnabled": true,
+        "rerankModel": "qwen3-rerank",
+        "maxRerankInputCharacters": 24000
+      },
+      "includesSeparateAnswerConversations": true,
+      "qualityClaim": "不以模拟排序/字面证据覆盖宣称真实准确率提升"
+    },
+    "screenshots": [
+      "target/knowledge-test-7632bbe9/rerank-comparison-page.png",
+      "target/knowledge-test-7632bbe9/rerank-chat-page.png"
+    ],
+    "preservation": [
+      "备份中192个文件全部保留，无文件缺失",
+      "用户ApiResponseHeaders.java与本轮基线字节一致",
+      "基础SYSTEM_PROMPT、RAG_RULES、改写PROMPT保持一致",
+      "POM、原SQL及V18迁移和ModelClient与本轮基线字节一致",
+      "独立测试容器已清理；原PostgreSQL与Redis容器保留"
+    ]
+  },
+  "notVerified": [
+    "真实百炼原生端点/业务空间/地域与密钥权限",
+    "真实重排模型的排序质量、延迟、限流阈值及计费",
+    "固定留出题的答案忠实性、正确率与RAGAS指标",
+    "多实例任务取消或多通道检索融合"
+  ],
+  "localConfiguration": {
+    "RAG_RERANK_ENABLED": "默认false；配置后改true启用聊天默认重排",
+    "RERANK_URL": "按百炼控制台/官方文档填写原生text-rerank完整地址",
+    "RERANK_MODEL": "qwen3-rerank",
+    "RERANK_API_KEY": "默认复用LLM_API_KEY，可独立配置"
+  },
+  "limitations": [
+    "本轮只有单路向量+重排，没有BM25/RRF/图谱/Agent",
+    "retrieval观察只随响应返回，历史保存最终来源快照与独立分数",
+    "超时或已知重排故障回退向量排序；取消停止整轮",
+    "字符预算不是Token限额或费用上限"
+  ],
+  "suggestedCommit": "feat(rag): add rerank with separate retrieval budgets and comparison tooling"
+}

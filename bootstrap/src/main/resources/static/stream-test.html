@@ -28,6 +28,7 @@
     <label for="question">本次问题</label>
     <textarea id="question" required>请分成八步解释一次 Java 后端调用大模型的完整流程，每步写两句话。</textarea>
     <button id="send" type="submit">发送并观察回答</button>
+    <button id="stop" type="button" disabled>停止生成</button>
     <p class="hint">请先在<a href="/login-test.html">聊天页登录</a>，再在同一标签页使用本页。历史会保存到数据库。</p>
   </form>
   <section class="result">
@@ -40,6 +41,22 @@
     const button = document.getElementById('send');
     const status = document.getElementById('status');
     const output = document.getElementById('answer');
+    const stop = document.getElementById('stop');
+    let active = null;
+    let aborter = null;
+    let stopping = false;
+    stop.addEventListener('click', async () => {
+      if (!active) return;
+      stopping = true;
+      stop.disabled = true;
+      try {
+        const response = await RagentAuth.fetch('/api/conversations/' + encodeURIComponent(active.conversationId) + '/streams/' + active.streamId + '/cancel', {method:'POST'});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.code + ': ' + result.message);
+        if (result.cancelled) aborter?.abort();
+        status.textContent = result.cancelled ? '已停止生成，未保存中断回答。' : '任务已结束，请到聊天页查看历史确认结果。';
+      } catch (error) { status.textContent = '停止请求未确认：' + error.message; }
+    });
 
     // fetch 的网络块不等于一条 SSE 事件，所以先累积，再按空行分帧。
     function createSseReader(onEvent) {
@@ -64,6 +81,7 @@
     form.addEventListener('submit', async event => {
       event.preventDefault();
       button.disabled = true;
+      aborter = new AbortController(); active = null; stopping = false;
       output.textContent = '';
       status.textContent = '正在连接…';
       const started = performance.now();
@@ -73,6 +91,7 @@
       try {
         const response = await RagentAuth.fetch('/api/chat/stream', {
           method: 'POST',
+          signal: aborter.signal,
           headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
           body: JSON.stringify({
             conversationId: document.getElementById('conversation-id').value,
@@ -87,7 +106,7 @@
           throw new Error('接口没有返回 SSE，请确认代码已更新并重启。');
         }
         const feed = createSseReader((name, data) => {
-          if (name === 'start') status.textContent = '已连接，等待模型返回第一段文字…';
+          if (name === 'start') { active = data; stop.disabled = !data.streamId; status.textContent = '已连接，等待模型返回第一段文字…'; }
           if (name === 'delta') {
             chunks++;
             output.textContent += data.content;
@@ -110,12 +129,13 @@
           if (done) { feed(decoder.decode()); break; }
           feed(decoder.decode(value, { stream: true }));
         }
-        if (!terminal) status.textContent = '连接已结束，但未收到完成事件；本次结果尚未确认，请重试。';
+        if (!terminal && !stopping) status.textContent = '连接已结束，但未收到完成事件；请查看历史确认保存情况后再决定是否重试。';
       } catch (error) {
-        status.textContent = `请求失败：${error.message}`;
+        if (!(stopping && error.name === 'AbortError')) status.textContent = `请求失败：${error.message}`;
       } finally {
         if (reader) reader.releaseLock();
         button.disabled = false;
+        stop.disabled = true; active = null; aborter = null;
       }
     });
   </script>

@@ -5,6 +5,7 @@ import com.dujiteng.ragentlearning.knowledge.service.KnowledgeRetrievalService;
 import com.dujiteng.ragentlearning.rag.core.rewrite.QueryRewriteService;
 import com.dujiteng.ragentlearning.rag.core.workflow.RagContext;
 import com.dujiteng.ragentlearning.rag.core.workflow.RagWorkflow;
+import com.dujiteng.ragentlearning.rag.core.retrieval.RetrievalOptions;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -29,13 +30,14 @@ public class DefaultRagWorkflow implements RagWorkflow {
 
     @Override
     public RagContext prepare(long userId, long knowledgeBaseId, String question,
-                              List<Map<String, String>> history, StreamCancellation cancellation) {
+                              List<Map<String, String>> history, StreamCancellation cancellation, Boolean rerank) {
         cancellation.check();
         var query = rewrite.rewrite(question, history, cancellation);
         cancellation.check();
         if (query.needsClarification()) return new RagContext(query, List.of(), CLARIFY);
-        var sources = retrieval.search(userId, knowledgeBaseId, query.searchQuestion());
+        var result = retrieval.retrieve(userId, knowledgeBaseId, query.searchQuestion(),
+                new RetrievalOptions(null, null, null, null, rerank), cancellation);
         cancellation.check();
-        return new RagContext(query, sources, sources.isEmpty() ? NO_EVIDENCE : null);
+        return new RagContext(query, result.sources(), result.sources().isEmpty() ? NO_EVIDENCE : null, result);
     }
 }

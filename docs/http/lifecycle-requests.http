@@ -1,0 +1,66 @@
+@baseUrl = http://localhost:18081
+
+### 使用独立测试知识库；先登录并创建kbId，替换为你明确要操作的资料。
+### 一键上传并后台入库（会调用Embedding；切分参数可省略）
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/ingest?chunkSize=800&overlap=120
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=LifecycleBoundary
+
+--LifecycleBoundary
+Content-Disposition: form-data; name="file"; filename="knowledge-demo.md"
+Content-Type: text/markdown
+
+< ../examples/knowledge-demo.md
+--LifecycleBoundary--
+
+> {% if (response.status === 202 || response.status === 200) { client.global.set("taskId", response.body.taskId); client.global.set("docId", response.body.documentId); } %}
+
+### 已上传文档一键入库；async=false可同步等待，响应中的status仍须检查
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/ingest?async=true
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"chunkSize":800,"overlap":120}
+
+### 当前知识库各文档的最近任务（最多100项）
+GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/ingestion-tasks
+Authorization: Bearer {{token}}
+
+### 任务阶段、错误码、错误原因和重试次数
+GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/ingestion-tasks/{{taskId}}
+Authorization: Bearer {{token}}
+
+### 只重试失败任务，保留任务ID并增加attempt
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/ingestion-tasks/{{taskId}}/retry
+Authorization: Bearer {{token}}
+
+### 当前默认切分/检索参数
+GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/search/settings
+Authorization: Bearer {{token}}
+
+### 仅检索预览；本次Top-K和阈值不改变聊天默认配置，会调用Embedding
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/search
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"question":"这份资料讲什么？","topK":4,"minScore":0.35}
+
+### 历史分页；beforeId取上次响应nextBeforeId，省略则读取最新一页
+GET {{baseUrl}}/api/conversations/{{conversationId}}/messages/page?size=20
+Authorization: Bearer {{token}}
+
+### streamId从本次SSE的start事件获取；cancelled=false时按status/历史确认是否已保存
+POST {{baseUrl}}/api/conversations/{{conversationId}}/streams/{{streamId}}/cancel
+Authorization: Bearer {{token}}
+
+### 删除本次测试文档及其片段/向量/任务；原文件清理状态在响应中
+DELETE {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}
+Authorization: Bearer {{token}}
+
+### 删除本次测试知识库内全部资料，旧聊天与来源快照保留
+DELETE {{baseUrl}}/api/knowledge-bases/{{kbId}}
+Authorization: Bearer {{token}}
+
+### 删除本次测试会话与全部消息，不能用旧编号重新创建
+DELETE {{baseUrl}}/api/conversations/{{conversationId}}
+Authorization: Bearer {{token}}

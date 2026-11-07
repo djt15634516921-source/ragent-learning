@@ -10,6 +10,7 @@ public final class StreamCancellation {
 
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private final AtomicReference<InputStream> upstream = new AtomicReference<>();
+    private boolean committed;
 
     public void check() {
         if (cancelled.get() || Thread.currentThread().isInterrupted()) {
@@ -33,9 +34,22 @@ public final class StreamCancellation {
         upstream.compareAndSet(body, null);
     }
 
-    public void cancel() {
+    public synchronized boolean cancel() {
+        if (committed) return false;
         cancelled.set(true);
         close(upstream.getAndSet(null));
+        return true;
+    }
+
+    /** 只包住完整回答的短事务；取消与提交在此确定先后，不包模型等待。 */
+    public synchronized void commit(Runnable save) {
+        check();
+        save.run();
+        committed = true;
+    }
+
+    public synchronized boolean isCommitted() {
+        return committed;
     }
 
     private static void close(InputStream body) {
