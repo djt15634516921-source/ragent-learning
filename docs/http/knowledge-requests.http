@@ -49,3 +49,10 @@ Content-Type: application/json
 ### 按顺序分页查看正文片段及来源
 GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/chunks?page=1&size=5
 Authorization: Bearer {{token}}
+
+### Agent 单轮问答，先把相关资料解析、切分并向量化
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/agent/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"question":"星河学习项目每周什么时候验收？"}

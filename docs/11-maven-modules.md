@@ -1,5 +1,7 @@
 # Maven 多模块整理与开发流程
 
+> 2026-11-07 新增 agent 普通类库模块。bootstrap 装配 agent，agent 使用 rag 检索及 infra-ai 和 framework 的基础类型。 [当前 Agent 模块](20-agent-react-tool.md)
+
 > 当前进度：已接通知识库检索问答，见 [D11 说明](13-knowledge-rag.md)。下文保留对应阶段的实现边界和验收记录。
 
 > 后续更新：D10 已新增文档切分及算法单元测试；最新功能与验收见[第 12 步](12-document-chunking.md)。下文保留模块化当次记录。

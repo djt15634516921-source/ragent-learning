@@ -3,8 +3,8 @@
 ## 必须遵守
 
 - 修改前确认目录、读取最新源码并检查 Git 状态。学习工程 `D:\jastudy\idea\ragent-learning`，参考工程 `D:\jastudy\idea\ragent`。保留用户未提交修改、自定义提示词、解析功能和源码压缩包。不自动提交、推送或硬重置。
-- 使用 Maven 多模块：framework、infra-ai、system、rag、bootstrap。根 POM 聚合并统一版本；仅 bootstrap 启动和打包可运行 JAR。保持 Java 17 编译目标、Spring Boot 4.1.0、PostgreSQL，当前验证使用 JDK 21。不进行无关升级或降级。
-- 依赖方向：bootstrap → system/rag/framework；rag → infra-ai/framework；system → framework；infra-ai → framework。基础模块不能反向依赖业务或启动模块。当前 rag 只通过 Sa-Token API 获取可信 userId，没有 system Java 类型依赖，不为了模仿目录添加无用依赖。
+- Maven 聚合 framework、infra-ai、system、rag、agent、bootstrap。根 POM 统一版本，bootstrap 负责启动和打包可运行 JAR。编译目标为 Java 17，使用 Spring Boot 4.1.0 和 PostgreSQL。
+- bootstrap 依赖 system、rag、agent、framework。agent 依赖 rag、infra-ai、framework。rag 依赖 infra-ai、framework，system 和 infra-ai 分别依赖 framework。Controller 通过 Sa-Token API 取得可信 userId 并显式传给业务层。
 - 模块 POM 只声明实际需要的依赖；版本统一放根 dependencyManagement，不能把所有依赖放父 dependencies 让每个模块继承。业务类库不应用 Spring Boot repackage。
 - 数据访问统一 MyBatis-Plus 3.5.18（spring-boot4-starter）；认证统一 Sa-Token 1.46.0（Boot 4 starter、Redis Template、Jackson 3 插件）。新版本必须核对官方兼容说明并实际启动。禁止混用 Boot 3 starter。
 - Spring Security 仅保留独立 crypto 用于 BCrypt。不恢复 SecurityFilterChain、UserDetails、AuthenticationPrincipal 或第二套认证状态。
@@ -83,7 +83,7 @@
 
 - rag模块内的chat负责会话、用户归属、同会话锁与保存协调；rag.core.rewrite负责检索问题改写，rag.core.workflow负责固定RAG前处理，rag.core.prompt负责模型消息组装。核心能力采用接口＋Impl，核心层不反向引用chat的DTO/VO。
 - RewriteResult、RagContext是内部结果；QueryRewriteVO由聊天边界转换后响应。HTTP字段与SSE事件不因内部整理改变，不把内部结果直接扩散成前端协议。
-- ChatService和改写服务都依赖infra-ai的LLMService；ModelClient是当前唯一Chat Completions适配器。删除独立QueryRewriteClient，不恢复两套重复鉴权、端点或响应协议。
+- 固定问答和改写共用 infra-ai 的 LLMService 与 ModelClient。Agent 的工具消息交给 AgentScope OpenAI 适配器，连接使用同一套 llm 配置。
 - 请求消息、总超时、temperature、max_tokens、完整响应长度预算通过不可变LLMRequest传递；不得修改共享客户端全局配置实现单次短超时。改写仍默认3秒、512输出Token、65536响应字符预算；回答默认60秒，流式仍使用原解析器与取消资源关闭逻辑。
 - 自定义SYSTEM_PROMPT继续保留在ChatServiceImpl；RAG规则、来源编号、历史助手正文隔离迁移到DefaultRAGPromptService时保持内容一致。原始问答与来源仍由独立Repository短事务保存，不将远程调用放进数据库事务。
 - 当前RagWorkflow实现改写、检索（含可选重排）与直接澄清/拒答，不声称已有完整Workflow框架、多模型路由或Agent。后续在该边界内扩展，避免再堆进聊天服务。
@@ -115,3 +115,10 @@
 - 原/search列表协议保留；/search/detail和/search/compare返回边界VO。对比共享同一次问题向量和候选快照；普通响应与SSE done追加retrieval观察字段，历史只保存最终来源及独立分数，不能把响应观察称作持久化全链路追踪。
 - 对比脚本区分文件命中、字面证据覆盖和人工答案质量；可选答案对照使用两个新会话并核对证据版本，证据变化标记NOT_COMPARABLE。rerankAttempts是适配器尝试数，usage只记上游实际值，不估算收费或编造效果提升。
 - 保留原基础提示词、RAG规则、改写提示词、身份/归属与问答原子提交边界。回归新增BaiLianRerankClientTest、RerankPostProcessorTest、verify-rerank.mjs与真实Edge检查，真实模型效果另列。
+
+## D20 Agent 知识库工具
+
+- AgentScope core 和 OpenAI 模型适配器使用原项目选定的 2.0.2。Agent 模块组装 ReAct 与 Toolkit，检索继续走 KnowledgeRetrievalService，bootstrap 装配 HTTP 入口。
+- 每次单轮问答使用独立的 ReActAgent 和工具状态。授权校验先于模型调用，工具构造时绑定可信用户和目标知识库。模型参数仅允许 query，工具执行时再次校验，服务按归属过滤资料。
+- 工具结果带本轮 citationId 并通过对应 tool_call_id 进入模型上下文。来源编号取自实际检索片段，重复的片段版本复用编号。使用 textContent 渲染模型输出和资料。
+- 服务限制 ReAct 迭代、实际检索次数和整轮等待时间。超时取消订阅并通知检索组件，工具错误用简短说明回传，页面展示稳定错误码。保留 HTTP 接口与工具回归的实际证据。

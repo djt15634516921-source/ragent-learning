@@ -28,7 +28,7 @@
 </head>
 <body>
   <h1>知识库与文档</h1>
-  <p><a href="/login-test.html">返回登录与聊天</a></p>
+  <p><a href="/login-test.html">返回登录与聊天</a> · <a href="#agent-panel">Agent 问答</a></p>
   <p id="identity" role="status">正在检查登录状态…</p>
   <fieldset id="workspace" disabled>
     <section>
@@ -97,6 +97,19 @@
       <p id="search-status" role="status"></p><div id="search-trace"></div><div id="search-results"></div>
       <div id="search-comparison" class="comparison"></div>
     </section>
+    <section id="agent-panel">
+      <h2>Agent 知识库问答</h2>
+      <p class="hint">Agent 按需要查询上方选中的知识库。每次提交独立问答，可展开核对本轮来源。</p>
+      <form id="agent-form">
+        <label for="agent-question">问题</label>
+        <textarea id="agent-question" rows="2" maxlength="8000" required placeholder="例如 星河学习项目每周什么时候验收？"></textarea>
+        <button type="submit">向 Agent 提问</button>
+      </form>
+      <p id="agent-status" role="status" aria-live="polite"></p>
+      <pre id="agent-answer"></pre>
+      <ol id="agent-calls"></ol>
+      <div id="agent-sources"></div>
+    </section>
   </fieldset>
   <p id="status" role="status" aria-live="polite"></p>
   <script src="/auth.js"></script>
@@ -126,13 +139,13 @@
       // FormData 的 Content-Type 和 boundary 由浏览器填写。
       return read(await RagentAuth.fetch(url, {method: 'POST', headers, body}));
     }
-    async function run(action) {
+    async function run(action, status = $('status')) {
       if (busy) return;
       busy = true;
       $('workspace').disabled = true;
-      $('status').textContent = '正在处理…';
+      status.textContent = '正在处理…';
       try { await action(); }
-      catch (error) { $('status').textContent = error.message; }
+      catch (error) { status.textContent = error.message; }
       finally {
         busy = false;
         $('workspace').disabled = $('identity').dataset.authenticated !== 'true';
@@ -345,11 +358,13 @@
         : result.errorMessage || (result.status === 'RUNNING' ? '文档正在解析，请稍后刷新。' : '尚未解析，请点击“解析文本”。');
     }
     async function bases(selected = $('knowledge-base').value) {
+      const previous = $('knowledge-base').value;
       const rows = await get('/api/knowledge-bases');
       $('knowledge-base').replaceChildren();
       if (!rows.length) $('knowledge-base').append(new Option('请先创建知识库', ''));
       for (const row of rows) $('knowledge-base').append(new Option(row.name, String(row.id)));
       if (rows.some(row => String(row.id) === String(selected))) $('knowledge-base').value = String(selected);
+      if (previous !== $('knowledge-base').value) clearAgentResult();
       await documents();
       await loadSettings();
     }
@@ -408,7 +423,8 @@
       target.replaceChildren();
       rows.forEach((row, i) => {
         const item = document.createElement('details'), title = document.createElement('summary'), text = document.createElement('pre');
-        title.textContent = `${i+1}. ${row.filename} · 第 ${row.chunkIndex+1} 块 · 向量分 ${row.score.toFixed(3)}`
+        const label = row.citationId == null ? (i + 1) + '.' : '[' + row.citationId + ']';
+        title.textContent = `${label} ${row.filename} · 第 ${row.chunkIndex+1} 块 · 向量分 ${row.score.toFixed(3)}`
           + (row.rerankScore == null ? '' : ' · 重排分 ' + row.rerankScore.toFixed(3)) + ` · 原文位置 [${row.startOffset}, ${row.endOffset})`;
         text.textContent = row.content; item.append(title,text); target.append(item);
       });
@@ -440,6 +456,35 @@
       $('search-status').textContent = '同一候选集对比 · 向量排序 ' + result.baseline.retrieval.totalMs + 'ms · 含重排 ' + result.reranked.retrieval.totalMs + 'ms';
       $('status').textContent = result.reranked.retrieval.rerankStatus === 'APPLIED' ? '对比完成，请核对证据与排序变化' : '重排未应用，请查看具体状态，不能据此声称效果提升';
     }));
+    function clearAgentResult() {
+      $('agent-status').textContent = '';
+      $('agent-answer').textContent = '';
+      $('agent-calls').replaceChildren();
+      $('agent-sources').replaceChildren();
+    }
+    $('agent-form').addEventListener('submit', event => {
+      event.preventDefault();
+      clearAgentResult();
+      run(async () => {
+        const id = $('knowledge-base').value;
+        const question = $('agent-question').value.trim();
+        if (!id || !question) throw new Error('请选择知识库并填写问题');
+        const result = await post('/api/knowledge-bases/' + id + '/agent/chat', JSON.stringify({question}), true);
+        const labels = {COMPLETED: '回答完成', NO_EVIDENCE: '资料不足', ITERATION_LIMIT: '已达到迭代上限'};
+        const toolLabels = {SUCCESS: '找到资料', NO_EVIDENCE: '没有命中资料', ERROR: '检索失败',
+          INVALID_ARGUMENTS: '参数无效', REJECTED: '工具请求被拒绝', LIMIT_REACHED: '已达到检索次数上限'};
+        $('agent-status').textContent = (labels[result.status] || result.status) + ' · ' + result.toolCalls.length + ' 条工具记录';
+        $('agent-answer').textContent = result.answer;
+        for (const call of result.toolCalls) {
+          const item = document.createElement('li');
+          const parts = [call.name, call.query, toolLabels[call.status] || call.status, call.errorCode];
+          parts.push(...call.citationIds.map(id => '[' + id + ']'));
+          item.textContent = parts.filter(Boolean).join(' · ');
+          $('agent-calls').append(item);
+        }
+        showSearchSources(result.sources.map(source => ({...source.fragment, citationId: source.citationId})), $('agent-sources'));
+      }, $('agent-status'));
+    });
     $('create-form').addEventListener('submit', event => {
       event.preventDefault();
       run(async () => {
@@ -466,6 +511,7 @@
       });
     });
     $('knowledge-base').addEventListener('change', () => run(async () => {
+      clearAgentResult();
       clearChunks();
       $('text-summary').textContent = '选择一份文档查看解析结果。';
       $('parsed-text').textContent = '';

@@ -18,6 +18,8 @@ import {verifyRewrite} from './verify-rewrite.mjs';
 import {verifyLifecycle} from './verify-lifecycle.mjs';
 import {mockRerank} from './mock-rerank.mjs';
 import {verifyRerank} from './verify-rerank.mjs';
+import {mockAgent} from './mock-agent.mjs';
+import {verifyAgent} from './verify-agent.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const runId = randomUUID().slice(0, 8);
@@ -66,7 +68,8 @@ async function stopApplication() {
 try {
   const moduleDependencies = {
     framework: [], 'infra-ai': ['framework'], system: ['framework'],
-    rag: ['framework', 'infra-ai'], bootstrap: ['framework', 'system', 'rag']
+    rag: ['framework', 'infra-ai'], agent: ['framework', 'infra-ai', 'rag'],
+    bootstrap: ['framework', 'system', 'rag', 'agent']
   };
   const artifacts = {};
   assert.match(readFileSync(join(root, 'pom.xml'), 'utf8'), /<packaging>pom<\/packaging>/);
@@ -84,7 +87,7 @@ try {
     const entries = execFileSync('jar', ['tf', artifacts[module]], {encoding: 'utf8', windowsHide: true});
     if (module !== 'bootstrap') assert.doesNotMatch(entries, /^BOOT-INF\//m, module + ' 必须为普通类库 JAR');
     else {
-      for (const library of ['framework', 'infra-ai', 'system', 'rag'])
+      for (const library of ['framework', 'infra-ai', 'system', 'rag', 'agent'])
         assert.ok(entries.includes('BOOT-INF/lib/' + library + '-'), '启动包包含 ' + library);
       for (const entry of ['application.yaml', 'db/chat-schema.sql', 'static/login-test.html', 'static/knowledge-test.html',
         'com/dujiteng/ragentlearning/RagentLearningApplication.class',
@@ -93,7 +96,7 @@ try {
       assert.ok(!entries.includes('BOOT-INF/classes/com/dujiteng/ragentlearning/chat/'), '业务类由 rag 类库提供');
     }
   }
-  passed('五模块依赖方向、普通类库 JAR、唯一可运行 JAR 与配置/页面/SQL 资源装配');
+  passed('六模块依赖方向、普通类库 JAR、唯一可运行 JAR 与配置/页面/SQL 资源装配');
   const fixtures = join(work, 'fixtures');
   const parserClasspath = readFileSync(join(root, 'rag/target/parser-classpath.txt'), 'utf8').trim();
   execFileSync('java', ['-cp', parserClasspath, join(root, 'scripts/fixtures/ParserFixtures.java'), fixtures],
@@ -123,6 +126,7 @@ try {
       if (request.url === '/rerank') { await mockRerank(input,response); return; }
       // 其余接口仍须是 Chat Completions 载荷。
       if (!Array.isArray(input.messages)) { response.writeHead(400).end(); return; }
+      if (await mockAgent(input, response)) return;
       if (await mockRewrite(input, response)) return;
       modelCalls.push(input);
       const question = input.messages.at(-1).content;
@@ -168,6 +172,7 @@ try {
     REDIS_HOST: '127.0.0.1', REDIS_PORT: redisPort, REDIS_PASSWORD: password, REDIS_DATABASE: '0',
     AUTH_REDIS_PREFIX: redisPrefix,
     CHAT_STREAM_TIMEOUT_MS: '1500',
+    AGENT_MAX_ITERS: '3', AGENT_TIMEOUT_MS: '2500',
     RAG_REWRITE_ENABLED: 'true', RAG_REWRITE_TIMEOUT_MS: '400',
     RAG_RERANK_ENABLED:'true', RERANK_URL:`http://127.0.0.1:${modelPort}/rerank`, RERANK_MODEL:'qwen3-rerank', RERANK_API_KEY:'local-test', RERANK_TIMEOUT_MS:'2500',
     KNOWLEDGE_INGESTION_POLL_MS:'200', KNOWLEDGE_INGESTION_LEASE_MS:'3000', KNOWLEDGE_CLEANUP_POLL_MS:'200',
@@ -455,6 +460,7 @@ try {
   const rewriteResult = await verifyRewrite({a, b, kb, secondKb, sql, modelCalls, passed});
   await verifyLifecycle({client,sql,storage,work,until,passed,stopApplication,startApplication,modelCalls});
   await verifyRerank({client,sql,work,until,passed,modelCalls});
+  await verifyAgent({client,until,passed});
   await stopApplication();
   await startApplication('restart.log');
   assert.equal((await a.request('/api/auth/me')).status, 200);

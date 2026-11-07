@@ -87,6 +87,14 @@ export async function verifyBrowser({root, origin, work, passed}) {
     await page.getByRole('button', {name: '查看文本', exact: true}).click();
     await page.waitForFunction(() => document.querySelector('#parsed-text').textContent.includes('朱之文01'));
     await page.screenshot({path: join(work, 'knowledge-page.png'), fullPage: true});
+    await page.locator('#agent-question').fill('请查浏览器资料的学习代号');
+    await page.getByRole('button', {name: '向 Agent 提问'}).click();
+    await page.waitForFunction(() => document.querySelector('#agent-status').textContent.includes('回答完成'));
+    assert.match(await page.locator('#agent-answer').textContent(), /朱之文01.*\[1\]/s);
+    assert.match(await page.locator('#agent-calls').textContent(), /search_knowledge.*找到资料.*\[1\]/);
+    assert.match(await page.locator('#agent-sources summary').first().textContent(), /\[1\].*browser-note.md/);
+    await page.locator('#agent-panel').screenshot({path: join(work, 'agent-knowledge-page.png')});
+    passed('真实 Edge：Agent 问答显示模型检索词、返回资料、答案与引用编号');
     await page.goto(origin + '/login-test.html');
     await page.waitForFunction(() => document.querySelector('#auth-status').textContent.includes('已登录'));
     await page.locator('#chat-knowledge-base').selectOption({label: '浏览器知识库'});

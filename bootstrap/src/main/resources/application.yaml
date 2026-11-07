@@ -87,6 +87,10 @@ rerank:
   api-key: ${RERANK_API_KEY:${LLM_API_KEY:}}
   timeout-ms: ${RERANK_TIMEOUT_MS:3000}
 
+agent:
+  max-iters: ${AGENT_MAX_ITERS:3}
+  timeout-ms: ${AGENT_TIMEOUT_MS:30000}
+
 knowledge:
   chunk-size: ${KNOWLEDGE_CHUNK_SIZE:800}
   chunk-overlap: ${KNOWLEDGE_CHUNK_OVERLAP:120}

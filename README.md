@@ -1,6 +1,6 @@
 # Ragent 学习工程
 
-现有工程已实现普通/流式聊天、多轮历史与 PostgreSQL 持久化、注册登录与用户隔离、知识库管理、文档上传下载、TXT/Markdown/PDF/DOCX 文本解析，带来源和重叠的文档切分，以及基于 Embedding + pgvector 的知识库问答（普通/流式回答及来源）。当前统一为 **MyBatis-Plus + Sa-Token + Redis**，采用 framework、infra-ai、system、rag、bootstrap 五个 Maven 模块。
+现有工程已实现普通/流式聊天、多轮历史与 PostgreSQL 持久化、注册登录与用户隔离、知识库管理、文档上传下载、TXT/Markdown/PDF/DOCX 文本解析，带来源和重叠的文档切分，以及基于 Embedding + pgvector 的知识库问答（普通/流式回答及来源）。工程采用 **MyBatis-Plus + Sa-Token + Redis**，包含 framework、infra-ai、system、rag、agent、bootstrap 六个 Maven 模块。
 
 2026-11-02 学习重点已按用户提供的简历教程调整为原项目核心能力的实现、理解与验证。基础 RAG 是当前起点；Agent、Skills、人工确认、分层记忆、混合检索和效果评测的差距与推进顺序见 [核心学习路线](docs/15-core-learning-roadmap.md)，这些计划项尚不能作为已实现能力。
 
@@ -9,6 +9,8 @@
 2026-11-06 增加知识库/文档删除、一键与后台入库、任务进度与重试、会话删除、历史分页、显式停止生成及检索调试/基础评测，见[知识库闭环说明](docs/18-knowledge-lifecycle.md)。原独立上传/解析/切分/向量化接口保留；历史来源快照与自定义提示词保留。重启应用自动执行增量SQL，无需新增凭证。
 
 随后按原项目源码接入可选Rerank，拆分召回/候选/最终上下文预算，并提供同候选排序及答案对照工具，见[重排实现与学习说明](docs/19-rerank-retrieval-budget.md)。默认关闭重排；启用需在IDEA环境变量填写RERANK_URL并设置RAG_RERANK_ENABLED=true，密钥默认复用LLM_API_KEY。无需重建表、升级依赖或重新向量化现有资料。
+
+2026-11-07 接入 AgentScope ReAct。重新加载根 POM 并启动 bootstrap 后，在知识库页选择已入库的知识库，打开「Agent 问答」，查看实际检索词、返回的片段和最终回答。Agent 使用现有支持工具调用的聊天模型配置。 [Agent 工具实现与运行说明](docs/20-agent-react-tool.md)
 
 ## 本机启动
 
@@ -38,6 +40,7 @@
 | RAG_RERANK_ENABLED / RERANK_URL / RERANK_MODEL | 默认false / 空 / qwen3-rerank；URL需配置百炼原生排序端点 |
 | RERANK_API_KEY / RERANK_TIMEOUT_MS / RAG_RERANK_MAX_INPUT_CHARS | 默认复用LLM_API_KEY / 3000ms完整响应总超时 / 24000粗略字符预算 |
 | RAG_REWRITE_ENABLED / RAG_REWRITE_TIMEOUT_MS | 默认 true / 3000；知识库连续提问额外调用一次现有模型补全检索问题，失败/超时明确标记回退 |
+| AGENT_MAX_ITERS / AGENT_TIMEOUT_MS | 默认 3 次 ReAct 迭代和 30000 毫秒整轮预算，实际检索次数也受迭代数限制 |
 
 ## 当前认证协议
 
@@ -66,7 +69,7 @@
 - [当前登录流程](docs/06-login.md)、[原文上传](docs/08-knowledge-upload.md)、[文本解析](docs/09-document-parsing.md)。
 - HTTP 请求：[认证](docs/http/auth-requests.http)、[聊天](docs/http/chat-requests.http)、[重启续聊](docs/http/persistence-requests.http)、[文档](docs/http/knowledge-requests.http)。真实凭证由本地环境提供。
 
-运行资源在 bootstrap/src/main/resources，用户代码在 system，聊天/知识库在 rag，模型客户端在 infra-ai，共用异常在 framework。
+运行资源在 bootstrap/src/main/resources，用户代码在 system，聊天和知识库在 rag，ReAct 与工具编排在 agent，模型客户端在 infra-ai，共用异常在 framework。
 
 DO 映射表，DTO 接收参数，VO 限制响应；Controller 注入 Service 接口，Impl 组织业务，Mapper 访问数据库。保留有实际归属和事务职责的 Repository，没有手写 MapperImpl 或强制继承通用 IService。
 
@@ -91,7 +94,9 @@ node scripts/verify-knowledge.mjs
 
 报告与日志在 `target/knowledge-test-<随机编号>/`。Maven verify负责构建，业务回归由Node脚本执行。2026-11-06本轮通过22个单元测试及76组接口/真实Edge检查，报告为 `target/knowledge-test-79450383/result.json`，持久验收摘要见[本轮验证记录](docs/evaluation/2026-11-06-knowledge-lifecycle.json)。涵盖删除回滚、文件清理补偿、入库重试/重启/阶段复用、历史分页和显式取消；本轮仅调用隔离假模型，未新增真实付费调用。基础评测工具可记录文档级命中、排序、模型标识/profile和耗时，实际回答质量仍需独立验证。
 
-随后重排增量验证通过32个单元测试（新增10个）及85组接口/真实Edge检查（包含原闭环回归），最新报告为`target/knowledge-test-7632bbe9/result.json`，见[重排验收记录](docs/evaluation/2026-11-06-rerank.json)。覆盖原第7名证据重排、共享候选A/B、独立新会话答案对照、预算、响应校验、回退、取消和旧来源JSON兼容。仅本机假模型，无新增真实付费调用；真实端点权限与质量尚未验收。
+随后重排增量验证通过32个单元测试（新增10个）及85组接口/真实Edge检查（包含原闭环回归），重排回归报告为`target/knowledge-test-7632bbe9/result.json`，见[重排验收记录](docs/evaluation/2026-11-06-rerank.json)。覆盖原第7名证据重排、共享候选A/B、独立新会话答案对照、预算、响应校验、回退、取消和旧来源JSON兼容。仅本机假模型，无新增真实付费调用；真实端点权限与质量尚未验收。
+
+Agent 增量通过 32 个单元测试与 93 组接口及真实 Edge 检查。新增场景使用本机模拟模型验证两次工具调用及回填、授权、检索失败和超时。 [完整回归记录](target/knowledge-test-d5c19f56/result.json)
 
 此前架构对齐19测试/58组结果保留在[架构验收记录](docs/17-rag-architecture-alignment.md)。D15用户曾完成一条真实模型连续追问观察，见[D15验收记录](docs/16-query-rewrite.md)；真实百炼最小RAG历史结果见[D11验收记录](docs/13-knowledge-rag-verification.md)。功能回归和确定性假向量评测不等同于真实模型效果通过。
 
