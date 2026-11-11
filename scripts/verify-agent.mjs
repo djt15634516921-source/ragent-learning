@@ -126,4 +126,5 @@ export async function verifyAgent({client, until, passed}) {
   await delay(150);
   assert.equal(agentState.calls.length, modelBefore + 1, '晚到的工具结果不能触发后续模型回答');
   passed('Agent 总超时覆盖工具执行，晚到检索不会继续发起下一轮模型调用');
+  return {owner, other, base, path};
 }

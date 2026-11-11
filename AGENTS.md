@@ -119,6 +119,13 @@
 ## D20 Agent 知识库工具
 
 - AgentScope core 和 OpenAI 模型适配器使用原项目选定的 2.0.2。Agent 模块组装 ReAct 与 Toolkit，检索继续走 KnowledgeRetrievalService，bootstrap 装配 HTTP 入口。
-- 每次单轮问答使用独立的 ReActAgent 和工具状态。授权校验先于模型调用，工具构造时绑定可信用户和目标知识库。模型参数仅允许 query，工具执行时再次校验，服务按归属过滤资料。
+- Agent 由 ReActAgentProvider 统一装配，工具由 AgentToolCatalog 注册。每轮 RuntimeContext 携带可信用户、会话 ID、目标知识库和本轮工具记录。模型参数仅允许 query，检索仍按归属过滤资料。
 - 工具结果带本轮 citationId 并通过对应 tool_call_id 进入模型上下文。来源编号取自实际检索片段，重复的片段版本复用编号。使用 textContent 渲染模型输出和资料。
 - 服务限制 ReAct 迭代、实际检索次数和整轮等待时间。超时取消订阅并通知检索组件，工具错误用简短说明回传，页面展示稳定错误码。保留 HTTP 接口与工具回归的实际证据。
+
+## D21 Agent 会话与状态
+
+- 会话、可回放消息和 AgentScope 状态分别存于 t_agent_conversation、t_agent_message、t_agent_state。迁移由 bootstrap 执行 V21 增量 SQL。会话绑定用户和知识库，删除本会话会级联清理对应消息和状态。
+- PgAgentStateStore 按 userId、sessionId、stateKey 加载实际 SDK 状态。执行前验证归属和 JSON 恢复，已有会话的状态缺失或不匹配应明确报错。SDK 的 agent_state 保存回调暂存到当前轮，结束后由 Repository 在同一事务更新会话版本、保存问答和状态。
+- AgentRunGate 对本机同一会话的问答和删除互斥。数据库版本条件防止迟到结果覆盖较新提交，网络请求始终在事务外。失败和超时保留上一个已提交状态，成功后清理 SDK 的会话缓存。
+- 历史接口只返回展示消息、工具记录和来源快照，按消息 ID 分页。原始 AgentScope 状态仅用于后端恢复。验收检查重启后模型请求实际携带先前的工具消息，并验证隔离、并发和写库回滚。

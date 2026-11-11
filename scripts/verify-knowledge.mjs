@@ -20,6 +20,7 @@ import {mockRerank} from './mock-rerank.mjs';
 import {verifyRerank} from './verify-rerank.mjs';
 import {mockAgent} from './mock-agent.mjs';
 import {verifyAgent} from './verify-agent.mjs';
+import {verifyAgentAfterRestart, verifyAgentConversations} from './verify-agent-conversations.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const runId = randomUUID().slice(0, 8);
@@ -460,9 +461,11 @@ try {
   const rewriteResult = await verifyRewrite({a, b, kb, secondKb, sql, modelCalls, passed});
   await verifyLifecycle({client,sql,storage,work,until,passed,stopApplication,startApplication,modelCalls});
   await verifyRerank({client,sql,work,until,passed,modelCalls});
-  await verifyAgent({client,until,passed});
+  const agentFixture = await verifyAgent({client,until,passed});
+  const agentSession = await verifyAgentConversations({fixture: agentFixture, sql, until, passed});
   await stopApplication();
   await startApplication('restart.log');
+  await verifyAgentAfterRestart({session: agentSession, sql, passed});
   assert.equal((await a.request('/api/auth/me')).status, 200);
   assert.equal((await (await a.request('/api/knowledge-bases')).json()).length, 2);
   assert.equal(await (await a.request(filePath)).text(), content);

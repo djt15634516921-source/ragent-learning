@@ -21,6 +21,7 @@ public class AgentChatController {
 
     @PostMapping("/chat")
     public AgentChatResponseVO chat(@PathVariable long knowledgeBaseId, @RequestBody AgentChatRequest request) {
-        return agent.chat(StpUtil.getLoginIdAsLong(), knowledgeBaseId, request == null ? null : request.question());
+        return agent.chat(StpUtil.getLoginIdAsLong(), knowledgeBaseId,
+                request == null ? null : request.conversationId(), request == null ? null : request.question());
     }
 }

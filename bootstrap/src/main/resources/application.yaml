@@ -24,7 +24,7 @@ spring:
   sql:
     init:
       mode: always
-      schema-locations: classpath:db/chat-schema.sql,classpath:db/migration/V18__knowledge_lifecycle.sql
+      schema-locations: classpath:db/chat-schema.sql,classpath:db/migration/V18__knowledge_lifecycle.sql,classpath:db/migration/V21__agent_conversations.sql
 
 server:
   port: ${SERVER_PORT:18081}

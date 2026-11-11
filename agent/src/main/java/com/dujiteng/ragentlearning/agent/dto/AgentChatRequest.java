@@ -1,4 +1,4 @@
 package com.dujiteng.ragentlearning.agent.dto;
 
-public record AgentChatRequest(String question) {
+public record AgentChatRequest(String question, String conversationId) {
 }

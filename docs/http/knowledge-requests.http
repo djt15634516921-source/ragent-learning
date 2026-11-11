@@ -50,9 +50,37 @@ Content-Type: application/json
 GET {{baseUrl}}/api/knowledge-bases/{{kbId}}/documents/{{docId}}/chunks?page=1&size=5
 Authorization: Bearer {{token}}
 
-### Agent 单轮问答，先把相关资料解析、切分并向量化
+### 新建 Agent 会话，使用已入库的测试知识库
+POST {{baseUrl}}/api/agent/conversations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"knowledgeBaseId":{{kbId}},"title":"Agent 追问验收"}
+
+> {% if (response.status === 201) client.global.set("agentConversationId", response.body.conversationId); %}
+
+### 当前知识库的 Agent 会话
+GET {{baseUrl}}/api/agent/conversations?knowledgeBaseId={{kbId}}
+Authorization: Bearer {{token}}
+
+### Agent 问答，沿用会话 ID 可继续提问
 POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/agent/chat
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"question":"星河学习项目每周什么时候验收？"}
+{"conversationId":"{{agentConversationId}}","question":"星河学习项目每周什么时候验收？"}
+
+### 重启前后用同一会话追问
+POST {{baseUrl}}/api/knowledge-bases/{{kbId}}/agent/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"conversationId":"{{agentConversationId}}","question":"那青禾项目呢？"}
+
+### 查看最新一页 Agent 消息及工具来源
+GET {{baseUrl}}/api/agent/conversations/{{agentConversationId}}/messages?size=20
+Authorization: Bearer {{token}}
+
+### 删除上面创建的测试会话及其消息、状态
+DELETE {{baseUrl}}/api/agent/conversations/{{agentConversationId}}
+Authorization: Bearer {{token}}

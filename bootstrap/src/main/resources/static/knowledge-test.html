@@ -99,7 +99,11 @@
     </section>
     <section id="agent-panel">
       <h2>Agent 知识库问答</h2>
-      <p class="hint">Agent 按需要查询上方选中的知识库。每次提交独立问答，可展开核对本轮来源。</p>
+      <p class="hint">Agent 会话绑定上方选中的知识库。选择同一会话可以继续追问，也可以回看历史消息。</p>
+      <label for="agent-conversation">Agent 会话</label>
+      <select id="agent-conversation"><option value="">新会话</option></select>
+      <button id="agent-create" type="button" class="secondary">新建 Agent 会话</button>
+      <button id="agent-delete" type="button" class="secondary">删除 Agent 会话</button>
       <form id="agent-form">
         <label for="agent-question">问题</label>
         <textarea id="agent-question" rows="2" maxlength="8000" required placeholder="例如 星河学习项目每周什么时候验收？"></textarea>
@@ -109,6 +113,11 @@
       <pre id="agent-answer"></pre>
       <ol id="agent-calls"></ol>
       <div id="agent-sources"></div>
+      <details id="agent-history-panel">
+        <summary>会话历史</summary>
+        <ol id="agent-history"></ol>
+        <button id="agent-load-older" type="button" class="secondary" disabled>加载更早消息</button>
+      </details>
     </section>
   </fieldset>
   <p id="status" role="status" aria-live="polite"></p>
@@ -364,9 +373,10 @@
       if (!rows.length) $('knowledge-base').append(new Option('请先创建知识库', ''));
       for (const row of rows) $('knowledge-base').append(new Option(row.name, String(row.id)));
       if (rows.some(row => String(row.id) === String(selected))) $('knowledge-base').value = String(selected);
-      if (previous !== $('knowledge-base').value) clearAgentResult();
       await documents();
       await loadSettings();
+      await loadAgentConversations(previous === $('knowledge-base').value ? $('agent-conversation').value : '');
+      if (previous !== $('knowledge-base').value) clearAgentConversationView();
     }
     $('delete-base').addEventListener('click', () => {
       const id = $('knowledge-base').value;
@@ -462,6 +472,95 @@
       $('agent-calls').replaceChildren();
       $('agent-sources').replaceChildren();
     }
+    function clearAgentConversationView() {
+      clearAgentResult();
+      $('agent-history').replaceChildren();
+      $('agent-load-older').disabled = true;
+      $('agent-load-older').dataset.beforeId = '';
+    }
+    async function loadAgentConversations(selected) {
+      const base = $('knowledge-base').value;
+      const rows = base ? await get('/api/agent/conversations?knowledgeBaseId=' + base) : [];
+      const select = $('agent-conversation');
+      select.replaceChildren(new Option('新会话', ''));
+      for (const row of rows) select.append(new Option(row.title, row.conversationId));
+      select.value = rows.some(row => row.conversationId === selected) ? selected : '';
+      $('agent-delete').disabled = !select.value;
+      if (!select.value) clearAgentConversationView();
+    }
+    function showAgentResult(result) {
+      clearAgentResult();
+      const labels = {COMPLETED: '回答完成', NO_EVIDENCE: '资料不足', ITERATION_LIMIT: '已达到迭代上限'};
+      const toolLabels = {SUCCESS: '找到资料', NO_EVIDENCE: '没有命中资料', ERROR: '检索失败',
+        INVALID_ARGUMENTS: '参数无效', REJECTED: '工具请求被拒绝', LIMIT_REACHED: '已达到检索次数上限'};
+      $('agent-status').textContent = (labels[result.status] || result.status) + ' · ' + result.toolCalls.length + ' 条工具记录';
+      $('agent-answer').textContent = result.answer;
+      for (const call of result.toolCalls) {
+        const item = document.createElement('li');
+        const parts = [call.name, call.query, toolLabels[call.status] || call.status, call.errorCode];
+        parts.push(...call.citationIds.map(id => '[' + id + ']'));
+        item.textContent = parts.filter(Boolean).join(' · ');
+        $('agent-calls').append(item);
+      }
+      showSearchSources(result.sources.map(source => ({...source.fragment, citationId: source.citationId})), $('agent-sources'));
+    }
+    async function loadAgentHistory(beforeId = '') {
+      const id = $('agent-conversation').value;
+      if (!id) return;
+      const path = '/api/agent/conversations/' + encodeURIComponent(id) + '/messages?size=20';
+      const page = await get(path + (beforeId ? '&beforeId=' + beforeId : ''));
+      const fragment = document.createDocumentFragment();
+      for (const message of page.messages) {
+        const row = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = message.role === 'user' ? '你' : 'Agent';
+        const content = document.createElement('pre');
+        content.textContent = message.content;
+        row.append(title, content);
+        if (message.role === 'assistant') {
+          const replay = document.createElement('button');
+          replay.type = 'button';
+          replay.className = 'secondary';
+          replay.textContent = '查看这轮工具和来源';
+          replay.addEventListener('click', () => showAgentResult({...message, answer: message.content}));
+          row.append(replay);
+        }
+        fragment.append(row);
+      }
+      if (beforeId) $('agent-history').prepend(fragment);
+      else $('agent-history').replaceChildren(fragment);
+      $('agent-load-older').disabled = !page.hasMore;
+      $('agent-load-older').dataset.beforeId = page.nextBeforeId || '';
+    }
+    $('agent-conversation').addEventListener('change', () => run(async () => {
+      clearAgentConversationView();
+      $('agent-delete').disabled = !$('agent-conversation').value;
+      await loadAgentHistory();
+      $('agent-history-panel').open = !!$('agent-conversation').value;
+      $('agent-status').textContent = '';
+    }, $('agent-status')));
+    $('agent-create').addEventListener('click', () => run(async () => {
+      const knowledgeBaseId = Number($('knowledge-base').value);
+      if (!knowledgeBaseId) throw new Error('请选择知识库');
+      const created = await post('/api/agent/conversations', JSON.stringify({knowledgeBaseId}), true);
+      clearAgentConversationView();
+      await loadAgentConversations(created.conversationId);
+      $('agent-status').textContent = '已创建 Agent 会话';
+    }, $('agent-status')));
+    $('agent-delete').addEventListener('click', () => {
+      const id = $('agent-conversation').value;
+      if (!id || !confirm('删除当前 Agent 会话及其消息与状态？')) return;
+      run(async () => {
+        const response = await RagentAuth.fetch('/api/agent/conversations/' + encodeURIComponent(id), {method: 'DELETE'});
+        if (!response.ok) await read(response);
+        await loadAgentConversations('');
+        $('agent-status').textContent = '已删除 Agent 会话';
+      }, $('agent-status'));
+    });
+    $('agent-load-older').addEventListener('click', () => run(async () => {
+      await loadAgentHistory($('agent-load-older').dataset.beforeId);
+      $('agent-status').textContent = '已加载历史消息';
+    }, $('agent-status')));
     $('agent-form').addEventListener('submit', event => {
       event.preventDefault();
       clearAgentResult();
@@ -469,20 +568,12 @@
         const id = $('knowledge-base').value;
         const question = $('agent-question').value.trim();
         if (!id || !question) throw new Error('请选择知识库并填写问题');
-        const result = await post('/api/knowledge-bases/' + id + '/agent/chat', JSON.stringify({question}), true);
-        const labels = {COMPLETED: '回答完成', NO_EVIDENCE: '资料不足', ITERATION_LIMIT: '已达到迭代上限'};
-        const toolLabels = {SUCCESS: '找到资料', NO_EVIDENCE: '没有命中资料', ERROR: '检索失败',
-          INVALID_ARGUMENTS: '参数无效', REJECTED: '工具请求被拒绝', LIMIT_REACHED: '已达到检索次数上限'};
-        $('agent-status').textContent = (labels[result.status] || result.status) + ' · ' + result.toolCalls.length + ' 条工具记录';
-        $('agent-answer').textContent = result.answer;
-        for (const call of result.toolCalls) {
-          const item = document.createElement('li');
-          const parts = [call.name, call.query, toolLabels[call.status] || call.status, call.errorCode];
-          parts.push(...call.citationIds.map(id => '[' + id + ']'));
-          item.textContent = parts.filter(Boolean).join(' · ');
-          $('agent-calls').append(item);
-        }
-        showSearchSources(result.sources.map(source => ({...source.fragment, citationId: source.citationId})), $('agent-sources'));
+        const conversationId = $('agent-conversation').value || null;
+        const result = await post('/api/knowledge-bases/' + id + '/agent/chat',
+          JSON.stringify({question, conversationId}), true);
+        showAgentResult(result);
+        await loadAgentConversations(result.conversationId);
+        await loadAgentHistory();
       }, $('agent-status'));
     });
     $('create-form').addEventListener('submit', event => {
@@ -511,12 +602,13 @@
       });
     });
     $('knowledge-base').addEventListener('change', () => run(async () => {
-      clearAgentResult();
+      clearAgentConversationView();
       clearChunks();
       $('text-summary').textContent = '选择一份文档查看解析结果。';
       $('parsed-text').textContent = '';
       await documents(); $('status').textContent = '';
       await loadSettings();
+      await loadAgentConversations('');
     }));
     $('refresh').addEventListener('click', () => run(async () => { await bases(); $('status').textContent = '列表已刷新'; }));
     setInterval(async () => {

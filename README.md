@@ -12,6 +12,8 @@
 
 2026-11-07 接入 AgentScope ReAct。重新加载根 POM 并启动 bootstrap 后，在知识库页选择已入库的知识库，打开「Agent 问答」，查看实际检索词、返回的片段和最终回答。Agent 使用现有支持工具调用的聊天模型配置。 [Agent 工具实现与运行说明](docs/20-agent-react-tool.md)
 
+知识库页支持创建、选择和删除 Agent 会话，也可以回看历史工具与来源。会话绑定所选知识库，服务启动时执行 V21 迁移，完成的问答和 AgentScope 状态一起保存在 PostgreSQL。 [Agent 会话与状态恢复](docs/21-agent-conversations.md)
+
 ## 本机启动
 
 1. 启动 PostgreSQL 和 Redis。现有 Redis 对外端口为 6379；密码以原项目 `bootstrap/src/main/resources/application.yaml` 为准，不要依赖记忆中的值。
@@ -97,6 +99,8 @@ node scripts/verify-knowledge.mjs
 随后重排增量验证通过32个单元测试（新增10个）及85组接口/真实Edge检查（包含原闭环回归），重排回归报告为`target/knowledge-test-7632bbe9/result.json`，见[重排验收记录](docs/evaluation/2026-11-06-rerank.json)。覆盖原第7名证据重排、共享候选A/B、独立新会话答案对照、预算、响应校验、回退、取消和旧来源JSON兼容。仅本机假模型，无新增真实付费调用；真实端点权限与质量尚未验收。
 
 Agent 增量通过 32 个单元测试与 93 组接口及真实 Edge 检查。新增场景使用本机模拟模型验证两次工具调用及回填、授权、检索失败和超时。 [完整回归记录](target/knowledge-test-d5c19f56/result.json)
+
+Agent 会话增量通过 32 个单元测试与 100 组接口及 Edge 检查。验收包含 PostgreSQL 状态重启恢复、跨用户隔离、并发、事务回滚和页面历史回放。 [完整回归记录](target/knowledge-test-341c64c9/result.json)
 
 此前架构对齐19测试/58组结果保留在[架构验收记录](docs/17-rag-architecture-alignment.md)。D15用户曾完成一条真实模型连续追问观察，见[D15验收记录](docs/16-query-rewrite.md)；真实百炼最小RAG历史结果见[D11验收记录](docs/13-knowledge-rag-verification.md)。功能回归和确定性假向量评测不等同于真实模型效果通过。
 

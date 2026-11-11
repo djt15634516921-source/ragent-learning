@@ -1,5 +1,7 @@
 # AgentScope ReAct 与知识库工具
 
+本页记录首次接入工具的单轮版本。当前 Agent 装配和继续会话的流程见新一阶段。 [Agent 会话与状态恢复](21-agent-conversations.md)
+
 本轮把现有检索能力交给 Agent 作为可调用工具。AgentScope 把工具描述交给聊天模型。模型可以直接回答问候，也可以请求 Java 检索，在看到工具结果之后继续查或生成答案。
 
 代码依据是原项目的 d9e5fc783ff7195d789d829fb35bdbfef928dbcc。原项目通过 ReActAgentProvider 组装模型和 Toolkit，KnowledgeSearchTool 将查到的资料作为 ToolResultBlock 回传。学习版复用这个分工，每次请求绑定一个所选知识库并创建独立的 Agent。 [原项目 Agent 组装](https://github.com/nageoffer/ragent/blob/d9e5fc783ff7195d789d829fb35bdbfef928dbcc/agent/src/main/java/com/nageoffer/ai/ragent/agent/config/ReActAgentProvider.java) · [原项目知识库工具](https://github.com/nageoffer/ragent/blob/d9e5fc783ff7195d789d829fb35bdbfef928dbcc/agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/KnowledgeSearchTool.java)
